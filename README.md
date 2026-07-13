@@ -1,36 +1,49 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Focus Hub — PM Productivity Dashboard
 
-## Getting Started
+Aggregates Gmail, Google Calendar, Docs/Sheets, Slack, and Granola meetings. Claude analyzes everything and surfaces your most important tasks for today and the week, ranked by priority, impact, and deadline.
 
-First, run the development server:
+## Setup (one-time)
+
+### 1. Fill in `.env.local`
+
+```
+ANTHROPIC_API_KEY=       # console.anthropic.com
+GOOGLE_CLIENT_ID=        # console.cloud.google.com → APIs & Services → Credentials
+GOOGLE_CLIENT_SECRET=
+SLACK_CLIENT_ID=         # api.slack.com/apps
+SLACK_CLIENT_SECRET=
+```
+
+### 2. Google Cloud setup
+- Go to console.cloud.google.com
+- Enable: Gmail API, Google Calendar API, Google Drive API
+- Create OAuth 2.0 credentials → Web Application
+- Add authorized redirect URI: `http://localhost:3000/api/auth/google/callback`
+
+### 3. Slack app setup
+- Go to api.slack.com/apps → Create New App
+- Add OAuth redirect URL: `http://localhost:3000/api/auth/slack/callback`
+- Add user token scopes: `channels:history`, `channels:read`, `groups:history`, `groups:read`, `im:history`, `im:read`
+
+### 4. Run
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open http://localhost:3000 → go to Settings → connect Google and Slack.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Then hit **Sync now** on the Today page.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## What it does
 
-## Learn More
+| View | What you see |
+|------|-------------|
+| **Today** | Critical + High priority tasks right now |
+| **This Week** | All open tasks, filterable by source |
+| **Calls** | Granola meetings, auto-mapped to tasks by Claude |
+| **Settings** | Connect accounts, view sync status |
 
-To learn more about Next.js, take a look at the following resources:
+## Granola
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Reads meeting notes directly from `~/Library/Application Support/Granola` — no API key needed. Just have Granola installed and recording.

@@ -39,3 +39,17 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+/app/generated/prisma
+
+# local database
+dev.db
+dev.db-journal
+dev.db-wal
+dev.db-shm
+
+# google oauth credentials
+*.apps.googleusercontent.com.json
+
+# prisma test files
+prisma/test.txt

@@ -1,0 +1,83 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../app/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model Task {
+  id           String    @id @default(cuid())
+  title        String
+  description  String?
+  priority     String
+  impact       String?
+  deadline     DateTime?
+  source       String
+  sourceRef    String?
+  status       String    @default("open")
+  rawContext   String?
+  projectLabel String?
+  snoozedUntil DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  callMappings CallMapping[]
+}
+
+model ExclusionRule {
+  id           String   @id @default(cuid())
+  pattern      String
+  intent       String
+  keywords     String
+  sourceTaskId String?
+  createdAt    DateTime @default(now())
+}
+
+model GranolaCall {
+  id         String   @id @default(cuid())
+  granolaId  String   @unique
+  title      String
+  startedAt  DateTime
+  duration   Int?
+  transcript String?
+  summary    String?
+  attendees  String?
+  synced     Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  callMappings CallMapping[]
+}
+
+model CallMapping {
+  id         String      @id @default(cuid())
+  callId     String
+  taskId     String?
+  notes      String?
+  confidence Float?
+  confirmed  Boolean     @default(false)
+  createdAt  DateTime    @default(now())
+
+  call GranolaCall @relation(fields: [callId], references: [id])
+  task Task?       @relation(fields: [taskId], references: [id])
+}
+
+model OAuthToken {
+  id           String   @id @default(cuid())
+  provider     String   @unique
+  accessToken  String
+  refreshToken String?
+  expiresAt    DateTime?
+  scope        String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model SyncLog {
+  id       String   @id @default(cuid())
+  source   String
+  status   String
+  message  String?
+  syncedAt DateTime @default(now())
+}

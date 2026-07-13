@@ -1,65 +1,260 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
+import { useEffect, useState, useCallback, useRef } from "react";
+import TaskCard from "@/components/TaskCard";
+import { format } from "date-fns";
+
+interface Task {
+  id: string;
+  title: string;
+  description?: string | null;
+  priority: string;
+  impact?: string | null;
+  deadline?: string | null;
+  source: string;
+  status: string;
+  rawContext?: string | null;
+  projectLabel?: string | null;
+}
+
+interface Stats { doneThisWeek: number; overdue: number; }
+type View = "today" | "week";
+
+const priorityOrder: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 };
+
+function groupByLabel(tasks: Task[]): Array<{ label: string | null; tasks: Task[] }> {
+  const map = new Map<string, Task[]>();
+  for (const t of tasks) {
+    const key = t.projectLabel || "__none__";
+    if (!map.has(key)) map.set(key, []);
+    map.get(key)!.push(t);
+  }
+  const groups: Array<{ label: string | null; tasks: Task[] }> = [];
+  for (const [key, tasks] of map) {
+    groups.push({ label: key === "__none__" ? null : key, tasks });
+  }
+  return groups.sort((a, b) => {
+    if (a.label === null) return 1;
+    if (b.label === null) return -1;
+    return a.label.localeCompare(b.label);
+  });
+}
+
+export default function TodayPage() {
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [stats, setStats] = useState<Stats | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
+  const [lastSync, setLastSync] = useState<string | null>(null);
+  const [view, setView] = useState<View>("today");
+  const [chatInput, setChatInput] = useState("");
+  const [chatLoading, setChatLoading] = useState(false);
+  const [chatError, setChatError] = useState<string | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const fetchStats = useCallback(async () => {
+    try {
+      const res = await fetch("/api/tasks?statsOnly=true");
+      setStats(await res.json());
+    } catch {}
+  }, []);
+
+  const fetchTasks = useCallback(async (v: View) => {
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/tasks?view=${v}`);
+      const data = await res.json();
+      setTasks(Array.isArray(data) ? data : []);
+    } catch {
+      setTasks([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const fetchStatus = useCallback(async () => {
+    try {
+      const res = await fetch("/api/status");
+      const data = await res.json();
+      setLastSync(data.lastSync ?? null);
+    } catch {}
+  }, []);
+
+  const reprioritize = useCallback(async () => {
+    try {
+      await fetch("/api/reprioritize", { method: "POST" });
+    } catch {}
+  }, []);
+
+  const groupTasks = useCallback(async () => {
+    try {
+      await fetch("/api/group-tasks", { method: "POST" });
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    fetchTasks(view);
+    fetchStatus();
+    fetchStats();
+    reprioritize();
+    groupTasks().then(() => fetchTasks(view));
+  }, [view, fetchTasks, fetchStatus, fetchStats, reprioritize, groupTasks]);
+
+  const handleSync = async () => {
+    setSyncing(true);
+    await fetch("/api/sync", { method: "POST" });
+    await Promise.all([reprioritize(), groupTasks()]);
+    await Promise.all([fetchTasks(view), fetchStatus(), fetchStats()]);
+    setSyncing(false);
+  };
+
+  const handleDone = async (id: string) => {
+    await fetch("/api/tasks", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, status: "done" }),
+    });
+    setTasks(prev => prev.filter(t => t.id !== id));
+    fetchStats();
+  };
+
+  const handleDelete = (id: string) => {
+    setTasks(prev => prev.filter(t => t.id !== id));
+    fetchStats();
+  };
+
+  const handleUpdate = (updated: Task) => {
+    setTasks(prev => prev.map(t => t.id === updated.id ? updated : t));
+  };
+
+  const handleSnooze = (id: string) => {
+    setTasks(prev => prev.filter(t => t.id !== id));
+  };
+
+  const handleChat = async () => {
+    const msg = chatInput.trim();
+    if (!msg || chatLoading) return;
+    setChatLoading(true);
+    setChatError(null);
+    try {
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: msg }),
+      });
+      if (!res.ok) throw new Error("Failed");
+      const created: Task[] = await res.json();
+      setChatInput("");
+      setTasks(prev => [...created, ...prev]);
+      fetchStats();
+    } catch {
+      setChatError("Could not create task — try again");
+    } finally {
+      setChatLoading(false);
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleChat();
+  };
+
+  const sorted = [...tasks].sort((a, b) =>
+    (priorityOrder[a.priority] ?? 4) - (priorityOrder[b.priority] ?? 4)
+  );
+  const groups = groupByLabel(sorted);
+  const todayLabel = view === "today" ? "today" : "this week";
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <div className="flex flex-col min-h-screen">
+      <div className="flex-1 p-8 max-w-3xl pb-52">
+
+        {/* Header */}
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h1 className="text-2xl font-bold text-white">Good morning, Rakshit</h1>
+            <p className="text-zinc-500 text-sm mt-1">
+              {format(new Date(), "EEEE, MMMM d")} · {tasks.length === 0 ? `No open tasks ${todayLabel}` : `${tasks.length} task${tasks.length !== 1 ? "s" : ""} need your attention`}
+            </p>
+          </div>
+          <button onClick={handleSync} disabled={syncing} className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 rounded-lg text-sm font-medium transition-colors">
+            {syncing ? <><span className="animate-spin">⟳</span> Syncing...</> : <>⟳ Sync now</>}
+          </button>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+
+        {/* Stats widget */}
+        {stats && (
+          <div className="flex gap-3 mb-4">
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-green-500/10 border border-green-500/20 rounded-lg text-xs text-green-400">
+              <span>✓</span> <span><strong>{stats.doneThisWeek}</strong> done this week</span>
+            </div>
+            {stats.overdue > 0 && (
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-red-500/10 border border-red-500/20 rounded-lg text-xs text-red-400">
+                <span>⚠</span> <span><strong>{stats.overdue}</strong> overdue</span>
+              </div>
+            )}
+          </div>
+        )}
+
+        {lastSync && <p className="text-xs text-zinc-600 mb-4">Last synced {format(new Date(lastSync), "h:mm a")}</p>}
+
+        {/* Tabs */}
+        <div className="flex gap-1 mb-6 p-1 bg-zinc-900 rounded-lg w-fit border border-zinc-800">
+          {(["today", "week"] as View[]).map(v => (
+            <button key={v} onClick={() => setView(v)}
+              className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${view === v ? "bg-indigo-600 text-white" : "text-zinc-400 hover:text-white"}`}>
+              {v === "today" ? "Today" : "This Week"}
+            </button>
+          ))}
         </div>
-      </main>
+
+        {/* Task list */}
+        {loading ? (
+          <div className="space-y-3">{[1, 2, 3].map(i => <div key={i} className="h-24 rounded-xl bg-zinc-800/50 animate-pulse" />)}</div>
+        ) : tasks.length === 0 ? (
+          <div className="text-center py-20 text-zinc-600">
+            <p className="text-4xl mb-3">🎉</p>
+            <p className="text-lg font-medium text-zinc-400">All clear for {todayLabel}</p>
+            <p className="text-sm mt-1">Hit sync to pull in the latest, or drop a task below</p>
+          </div>
+        ) : (
+          <div className="space-y-8">
+            {groups.map(group => (
+              <section key={group.label ?? "__none__"}>
+                <h2 className="text-xs font-semibold text-zinc-400 uppercase tracking-widest mb-3 flex items-center gap-2">
+                  {group.label ? (
+                    <span className="px-2 py-0.5 bg-zinc-800 rounded-md">{group.label}</span>
+                  ) : (
+                    <span className="text-zinc-600">Other</span>
+                  )}
+                </h2>
+                <div className="space-y-2">
+                  {group.tasks.map(t => (
+                    <TaskCard key={t.id} task={t} onDone={handleDone} onDelete={handleDelete} onUpdate={handleUpdate} onSnooze={handleSnooze} />
+                  ))}
+                </div>
+              </section>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Chat bar */}
+      <div className="fixed bottom-0 left-0 right-0 border-t border-zinc-800 bg-zinc-950/95 backdrop-blur-sm p-4">
+        <div className="max-w-3xl mx-auto">
+          {chatError && <p className="text-xs text-red-400 mb-1.5">{chatError}</p>}
+          <div className="flex gap-3 items-end">
+            <textarea ref={textareaRef} value={chatInput} onChange={e => setChatInput(e.target.value)} onKeyDown={handleKeyDown}
+              placeholder="Drop a task, paste meeting notes, or describe what needs doing... (Cmd+Enter to send)"
+              rows={2}
+              className="flex-1 bg-zinc-900 border border-zinc-700 focus:border-indigo-500 rounded-xl px-4 py-3 text-sm text-white placeholder-zinc-600 resize-none focus:outline-none transition-colors" />
+            <button onClick={handleChat} disabled={chatLoading || !chatInput.trim()}
+              className="px-4 py-3 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 rounded-xl text-sm font-medium text-white transition-colors shrink-0">
+              {chatLoading ? <span className="animate-spin inline-block">⟳</span> : "Add"}
+            </button>
+          </div>
+          <p className="text-xs text-zinc-700 mt-1.5">Paste anything — Granola notes, Slack messages, emails. Claude extracts the tasks.</p>
+        </div>
+      </div>
     </div>
   );
 }
