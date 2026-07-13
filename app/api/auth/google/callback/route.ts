@@ -3,20 +3,23 @@ import { google } from "googleapis";
 import { prisma } from "@/lib/db";
 import { redirect } from "next/navigation";
 
+function getRedirectUri(req: NextRequest) {
+  if (process.env.GOOGLE_REDIRECT_URI) return process.env.GOOGLE_REDIRECT_URI;
+  const proto = req.headers.get("x-forwarded-proto") || "http";
+  const host = req.headers.get("x-forwarded-host") || req.headers.get("host") || "localhost:3001";
+  return `${proto}://${host}/api/auth/google/callback`;
+}
+
 export async function GET(req: NextRequest) {
   const code = req.nextUrl.searchParams.get("code");
   if (!code) {
     return Response.json({ error: "No code provided" }, { status: 400 });
   }
 
-  const proto = req.headers.get("x-forwarded-proto") || "http";
-  const host = req.headers.get("x-forwarded-host") || req.headers.get("host") || "localhost:3001";
-  const redirectUri = `${proto}://${host}/api/auth/google/callback`;
-
   const oauth2Client = new google.auth.OAuth2(
     process.env.GOOGLE_CLIENT_ID,
     process.env.GOOGLE_CLIENT_SECRET,
-    redirectUri
+    getRedirectUri(req)
   );
 
   const { tokens } = await oauth2Client.getToken(code);

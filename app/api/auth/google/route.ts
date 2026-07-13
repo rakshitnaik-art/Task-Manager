@@ -3,6 +3,13 @@ import { google } from "googleapis";
 import { SCOPES } from "@/lib/google";
 import { redirect } from "next/navigation";
 
+function getRedirectUri(req: NextRequest) {
+  if (process.env.GOOGLE_REDIRECT_URI) return process.env.GOOGLE_REDIRECT_URI;
+  const proto = req.headers.get("x-forwarded-proto") || "http";
+  const host = req.headers.get("x-forwarded-host") || req.headers.get("host") || "localhost:3001";
+  return `${proto}://${host}/api/auth/google/callback`;
+}
+
 export async function GET(req: NextRequest) {
   if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
     return Response.json(
@@ -11,14 +18,10 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  const proto = req.headers.get("x-forwarded-proto") || "http";
-  const host = req.headers.get("x-forwarded-host") || req.headers.get("host") || "localhost:3001";
-  const redirectUri = `${proto}://${host}/api/auth/google/callback`;
-
   const oauth2Client = new google.auth.OAuth2(
     process.env.GOOGLE_CLIENT_ID,
     process.env.GOOGLE_CLIENT_SECRET,
-    redirectUri
+    getRedirectUri(req)
   );
 
   const url = oauth2Client.generateAuthUrl({
