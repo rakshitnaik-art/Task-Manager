@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import TaskCard from "@/components/TaskCard";
+import TaskDrawer from "@/components/TaskDrawer";
 import { format } from "date-fns";
 
 interface Task {
@@ -48,6 +49,7 @@ export default function TodayPage() {
   const [view, setView] = useState<View>("today");
   const [overdueOnly, setOverdueOnly] = useState(false);
   const [search, setSearch] = useState("");
+  const [openTaskId, setOpenTaskId] = useState<string | null>(null);
   const [chatInput, setChatInput] = useState("");
   const [chatLoading, setChatLoading] = useState(false);
   const [chatReply, setChatReply] = useState<string | null>(null);
@@ -184,6 +186,8 @@ export default function TodayPage() {
   const todayLabel = view === "today" ? "today" : "this week";
 
   return (
+    <>
+    {openTaskId && <TaskDrawer taskId={openTaskId} onClose={() => setOpenTaskId(null)} />}
     <div className="flex flex-col min-h-screen">
       <div className="flex-1 p-8 max-w-3xl pb-56">
 
@@ -274,6 +278,7 @@ export default function TodayPage() {
                       onUpdate={handleUpdate}
                       onSnooze={handleSnooze}
                       onStatusChange={handleStatusChange}
+                      onOpen={setOpenTaskId}
                     />
                   ))}
                 </div>
@@ -316,5 +321,6 @@ export default function TodayPage() {
         </div>
       </div>
     </div>
+    </>
   );
 }

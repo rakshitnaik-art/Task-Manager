@@ -24,6 +24,7 @@ interface Props {
   onUpdate: (updated: Task) => void;
   onSnooze: (id: string) => void;
   onStatusChange?: (id: string, status: string, blockedReason?: string) => void;
+  onOpen?: (id: string) => void;
 }
 
 const priorityConfig = {
@@ -51,7 +52,7 @@ function labelColor(label: string) {
 
 const sourceIcon: Record<string, string> = { email: "✉️", slack: "💬", doc: "📄", sheet: "📊", calendar: "📅", granola: "🎙️", manual: "✏️", chat: "💬" };
 
-export default function TaskCard({ task, onDone, onDelete, onUpdate, onSnooze, onStatusChange }: Props) {
+export default function TaskCard({ task, onDone, onDelete, onUpdate, onSnooze, onStatusChange, onOpen }: Props) {
   const [mode, setMode] = useState<"view" | "edit">("view");
   const [expanded, setExpanded] = useState(false);
   const [showSnooze, setShowSnooze] = useState(false);
@@ -226,7 +227,10 @@ export default function TaskCard({ task, onDone, onDelete, onUpdate, onSnooze, o
                 )}
               </div>
 
-              <h3 className="font-semibold text-white text-sm leading-snug mb-1.5">{task.title}</h3>
+              <h3
+                className={`font-semibold text-white text-sm leading-snug mb-1.5 ${onOpen ? "cursor-pointer hover:text-indigo-300 transition-colors" : ""}`}
+                onClick={() => onOpen?.(task.id)}
+              >{task.title}</h3>
 
               {/* Blocked reason */}
               {task.status === "blocked" && task.blockedReason && (
