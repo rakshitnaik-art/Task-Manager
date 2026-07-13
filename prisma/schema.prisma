@@ -19,8 +19,9 @@ model Task {
   status       String    @default("open")
   rawContext   String?
   projectLabel String?
-  snoozedUntil DateTime?
-  createdAt    DateTime  @default(now())
+  snoozedUntil  DateTime?
+  blockedReason String?
+  createdAt     DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
   callMappings CallMapping[]

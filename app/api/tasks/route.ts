@@ -1,7 +1,32 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/db";
 
+const ACTIVE_STATUSES = ["open", "in_progress", "blocked"];
+
+// Add blockedReason column if it doesn't exist yet (Turso migration)
+async function ensureBlockedReasonColumn() {
+  try {
+    await prisma.$executeRaw`ALTER TABLE "Task" ADD COLUMN "blockedReason" TEXT`;
+  } catch {
+    // Column already exists — ignore
+  }
+}
+
+const priorityOrder: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 };
+
+function sortByDeadlineThenPriority<T extends { deadline: Date | null; priority: string }>(tasks: T[]): T[] {
+  return [...tasks].sort((a, b) => {
+    const aMs = a.deadline?.getTime() ?? null;
+    const bMs = b.deadline?.getTime() ?? null;
+    if (aMs !== null && bMs === null) return -1;
+    if (aMs === null && bMs !== null) return 1;
+    if (aMs !== null && bMs !== null && aMs !== bMs) return aMs - bMs;
+    return (priorityOrder[a.priority] ?? 4) - (priorityOrder[b.priority] ?? 4);
+  });
+}
+
 export async function GET(req: NextRequest) {
+  await ensureBlockedReasonColumn();
   try {
     const now = new Date();
 
@@ -11,7 +36,7 @@ export async function GET(req: NextRequest) {
       startOfWeek.setHours(0, 0, 0, 0);
       const [doneThisWeek, overdue] = await Promise.all([
         prisma.task.count({ where: { status: "done", updatedAt: { gte: startOfWeek } } }),
-        prisma.task.count({ where: { status: "open", deadline: { lt: now } } }),
+        prisma.task.count({ where: { status: { in: ACTIVE_STATUSES }, deadline: { lt: now } } }),
       ]);
       return Response.json({ doneThisWeek, overdue });
     }
@@ -27,7 +52,7 @@ export async function GET(req: NextRequest) {
     const where =
       view === "today"
         ? {
-            status: "open" as const,
+            status: { in: ACTIVE_STATUSES },
             OR: [
               { priority: { in: ["critical", "high"] } },
               { deadline: { lte: endOfToday } },
@@ -36,29 +61,17 @@ export async function GET(req: NextRequest) {
           }
         : view === "week"
         ? {
-            status: "open" as const,
+            status: { in: ACTIVE_STATUSES },
             OR: [
               { deadline: { lte: endOfWeek } },
               { priority: { in: ["critical", "high", "medium"] } },
             ],
             AND: [snoozeFilter],
           }
-        : { status: "open" as const, AND: [snoozeFilter] };
+        : { status: { in: ACTIVE_STATUSES }, AND: [snoozeFilter] };
 
-    const tasks = await prisma.task.findMany({
-      where,
-      orderBy: [{ priority: "asc" }, { deadline: "asc" }, { createdAt: "desc" }],
-      take: 50,
-    });
-
-    const priorityOrder = { critical: 0, high: 1, medium: 2, low: 3 };
-    tasks.sort(
-      (a, b) =>
-        (priorityOrder[a.priority as keyof typeof priorityOrder] ?? 4) -
-        (priorityOrder[b.priority as keyof typeof priorityOrder] ?? 4)
-    );
-
-    return Response.json(tasks);
+    const tasks = await prisma.task.findMany({ where, take: 100 });
+    return Response.json(sortByDeadlineThenPriority(tasks));
   } catch (e) {
     console.error("[/api/tasks GET]", e);
     return Response.json([], { status: 500 });
@@ -66,6 +79,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
+  await ensureBlockedReasonColumn();
   try {
     const body = await req.json();
     const { id, snoozedUntil: snoozeInput, ...rest } = body;
@@ -89,6 +103,7 @@ export async function PATCH(req: NextRequest) {
     if (rest.impact !== undefined) data.impact = rest.impact;
     if (rest.projectLabel !== undefined) data.projectLabel = rest.projectLabel;
     if (rest.deadline !== undefined) data.deadline = rest.deadline ? new Date(rest.deadline) : null;
+    if (rest.blockedReason !== undefined) data.blockedReason = rest.blockedReason;
     if (snoozedUntil !== undefined) data.snoozedUntil = snoozedUntil;
 
     const task = await prisma.task.update({ where: { id }, data });
@@ -100,6 +115,7 @@ export async function PATCH(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  await ensureBlockedReasonColumn();
   try {
     const body = await req.json();
     const task = await prisma.task.create({
@@ -128,7 +144,6 @@ export async function DELETE(req: NextRequest) {
 
     await prisma.task.delete({ where: { id } });
 
-    // Learn exclusion rule from this deletion
     let learnedRule = null;
     try {
       const { learnExclusionRule } = await import("@/lib/claude");
