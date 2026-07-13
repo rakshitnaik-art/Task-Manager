@@ -11,6 +11,7 @@ export interface ExtractedTask {
   source: string;
   sourceRef?: string;
   rawContext?: string;
+  confidence?: number;
 }
 
 export interface CallMapping {
@@ -27,52 +28,68 @@ export async function analyzeAndExtractTasks(data: {
     id: string; subject: string; from: string; date: string; snippet: string;
     body?: string; messageCount?: number; needsFollowUp?: boolean;
     daysSinceLastMsg?: number; lastSender?: string;
+    isCC?: boolean; mentionedInBody?: boolean;
   }>;
-  events: Array<{ id: string; title: string; start: string; description: string; attendees: string[] }>;
+  events: Array<{
+    id: string; title: string; start: string; description: string; attendees: string[];
+    isOrganizer?: boolean; hasActionItems?: boolean;
+  }>;
   docs: Array<{ id: string; name: string; type: string; modifiedAt: string; url: string }>;
   slackMessages: Array<{ channel: string; text: string; ts: string; user: string }>;
   recentDoneTasks?: string[];
 }): Promise<ExtractedTask[]> {
-  const prompt = `You are a productivity assistant for a senior Product Manager. Extract actionable tasks from the data below.
+  const prompt = `You are a productivity assistant for Rakshit Naik, a senior Product Manager at Capillary Tech.
 
-SKIP these — they are noise:
-- Pure FYI emails with zero action required
-- Automated reports, digests, system alerts, monitoring emails
-- Newsletters, marketing, and promotional content
-- Routine status updates where nothing is asked of the PM
+Extract actionable tasks. For EVERY task you extract, assign a confidence score (0.0–1.0) representing how certain you are this requires PM action. Only include tasks with confidence >= 0.65.
+
+=== HARD FILTERS — skip immediately ===
+- Automated reports, system alerts, monitoring, FTP/cron/cluster alerts, digest emails
+- Newsletters, marketing, promotional content
 - Completed items or past-tense updates
-- Casual Slack chatter with no ask
+- Casual Slack chatter with no clear ask
+- Calendar events where isOrganizer=false AND hasActionItems=false — never create a task for these (e.g. "1:1 with X", standard standups, no-prep meetings)
 
-INCLUDE these:
-- Emails or messages where someone is asking the PM to review, decide, respond, approve, or follow up
-- Calendar events that require prep or a deliverable
-- Docs/sheets that have open items, comments, or next steps
-- Anything with a deadline or a stakeholder waiting on the PM
-- Emails where the PM is CC'd but the context implies they own the item
-- Threads marked needsFollowUp:true — create a "Follow up with [sender name] on [topic]" task and set priority high
+=== ACTION SIGNAL REQUIREMENT ===
+Before creating a task from an email or Slack message, it MUST contain at least ONE of:
+- A direct question to the PM ("can you", "could you", "would you", "do you think", "what do you")
+- An explicit request verb ("please review", "please approve", "please respond", "need you to", "requesting your")
+- A deadline mentioned alongside an ask
+- A direct mention by name in a CC'd email: "Rakshit" or "+Rakshit"
+If NONE of these signals are present, confidence must be < 0.65 — drop it.
 
-PRIORITY RULES (in order of precedence):
-1. "critical" — deadline within 2 days, OR body/subject contains: urgent, ASAP, blocking, by EOD, by end of day, P0, immediately, escalated
-2. "high" — deadline within 7 days, OR key stakeholder waiting, OR needsFollowUp thread
+=== CC vs TO RULES ===
+- isCC=false (you are in To): normal bar — extract tasks if there's an action signal
+- isCC=true, mentionedInBody=true: include if there's an action signal — someone explicitly called you out
+- isCC=true, mentionedInBody=false: SKIP. You were CC'd for awareness only. Do NOT create a task.
+
+=== CALENDAR RULES ===
+- isOrganizer=true OR hasActionItems=true: eligible for a prep/action task if meaningful
+- isOrganizer=false AND hasActionItems=false: SKIP — no task needed (e.g. "1:1 with X")
+- Recurring standups appearing 4+ times/week: SKIP
+
+=== PRIORITY RULES ===
+1. "critical" — deadline within 2 days, OR contains: urgent, ASAP, blocking, by EOD, P0, immediately, escalated
+2. "high" — deadline within 7 days, OR key stakeholder waiting, OR needsFollowUp=true
 3. "medium" — should do this week, no hard deadline
 4. "low" — nice to have, no urgency
 
-RECURRING TASK DETECTION:
-If recentDoneTasks is provided, check if a new task is semantically the same as something already done (same action + same subject). If so, skip it — do not create a duplicate. However if a recurring task reappears after 5+ days, it may be a new occurrence — include it with a note.
+=== RECURRING TASK DETECTION ===
+If recentDoneTasks lists something semantically identical (same action + same subject), skip it unless it's clearly a new occurrence (5+ days gap), in which case include with a note.
 
-For each task use:
-- title: verb-first (e.g. "Review Q3 PRD", "Respond to Ankit re: pricing", "Follow up with Brian on Hertz intake form")
-- description: what needs doing and why — use the full email body (body field) not just the snippet
+=== OUTPUT FORMAT per task ===
+- title: verb-first ("Review Q3 PRD", "Respond to Ankit re: pricing")
+- description: what needs doing and why — use full body, not just snippet
 - priority: per rules above
 - impact: one-line business impact
-- deadline: ISO date string if mentioned, otherwise omit
+- confidence: 0.0–1.0 (your certainty this requires PM action)
+- deadline: ISO date if mentioned, otherwise omit
 - source: "email" | "slack" | "doc" | "sheet" | "calendar"
 - sourceRef: thread ID or doc ID
 
 DATA:
 ${JSON.stringify(data, null, 2)}
 
-Return a JSON array. Max 20 tasks. Return ONLY valid JSON, no markdown.`;
+Return a JSON array. Max 20 tasks. Include ONLY tasks with confidence >= 0.65. Return ONLY valid JSON, no markdown.`;
 
   const response = await anthropic.messages.create({
     model: "claude-sonnet-4-6",

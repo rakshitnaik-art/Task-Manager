@@ -143,12 +143,18 @@ export async function fetchRecentEmailThreads(since?: Date, maxThreads = 60) {
       const daysSinceLast = lastDate ? (Date.now() - new Date(lastDate).getTime()) / (1000 * 60 * 60 * 24) : 0;
       const needsFollowUp = sentByMe && daysSinceLast >= 3;
 
+      const toHeader = headers.find(h => h.name === 'To')?.value || '';
+      const ccHeader = headers.find(h => h.name === 'Cc')?.value || '';
+      const isCC = !!myEmail && !toHeader.toLowerCase().includes(myEmail) && (ccHeader.toLowerCase().includes(myEmail) || ccHeader.length > 0);
+
       let combinedBody = '';
       for (const msg of messages) {
         const body = extractTextFromPayload(msg.payload).slice(0, 600);
         if (body) combinedBody += body + '\n---\n';
         if (combinedBody.length > 2500) break;
       }
+      const bodyLower = combinedBody.toLowerCase();
+      const mentionedInBody = bodyLower.includes('rakshit') || bodyLower.includes('+rakshit');
 
       results.push({
         id: thread.id!,
@@ -161,6 +167,8 @@ export async function fetchRecentEmailThreads(since?: Date, maxThreads = 60) {
         needsFollowUp,
         lastSender: lastFrom,
         daysSinceLastMsg: Math.floor(daysSinceLast),
+        isCC,
+        mentionedInBody,
       });
     }
   }
@@ -205,6 +213,8 @@ export async function fetchUpcomingEvents(days = 7) {
       end: e.end?.dateTime || e.end?.date || "",
       description: e.description || "",
       attendees: (e.attendees || []).map((a) => a.email || ""),
+      isOrganizer: e.organizer?.self === true,
+      hasActionItems: /[•\-\*]|\bcan you\b|\bplease\b|\baction item\b|\bnext step\b|\btodo\b|\bto-do\b|\bfollow.?up\b/i.test(e.description || ""),
     }));
 }
 

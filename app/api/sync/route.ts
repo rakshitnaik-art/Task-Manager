@@ -59,8 +59,17 @@ export async function POST() {
     });
     const recentDoneTasks = recentDone.map(t => t.title);
 
+    // Pre-filter emails whose thread IDs already have a task — avoid re-evaluating known threads
+    const existingSourceRefs = await prisma.task.findMany({
+      where: { sourceRef: { not: null } },
+      select: { sourceRef: true },
+    });
+    const seenRefs = new Set(existingSourceRefs.map(t => t.sourceRef!));
+    const unseenEmails = emailData.filter(e => !seenRefs.has(e.id));
+    await log("sync-preflight", "ok", `${emailData.length} threads fetched, ${unseenEmails.length} unseen (${emailData.length - unseenEmails.length} skipped — already processed)`);
+
     // First pass: non-email sources + first email chunk
-    const firstChunk = emailData.slice(0, EMAIL_CHUNK);
+    const firstChunk = unseenEmails.slice(0, EMAIL_CHUNK);
     const firstBatch = await analyzeAndExtractTasks({
       emails: firstChunk,
       events: eventData,
@@ -71,8 +80,8 @@ export async function POST() {
     extractedTasks.push(...firstBatch);
 
     // Remaining email chunks (emails only, no need to re-send calendar/slack/docs)
-    for (let i = EMAIL_CHUNK; i < emailData.length; i += EMAIL_CHUNK) {
-      const chunk = emailData.slice(i, i + EMAIL_CHUNK);
+    for (let i = EMAIL_CHUNK; i < unseenEmails.length; i += EMAIL_CHUNK) {
+      const chunk = unseenEmails.slice(i, i + EMAIL_CHUNK);
       const batch = await analyzeAndExtractTasks({
         emails: chunk,
         events: [],
@@ -83,7 +92,11 @@ export async function POST() {
       extractedTasks.push(...batch);
     }
 
-    await log("claude-analysis", "ok", `${extractedTasks.length} tasks from ${emailData.length} threads`);
+    // Drop low-confidence extractions before any further processing
+    const beforeConfFilter = extractedTasks.length;
+    const lowConf = extractedTasks.filter(t => (t.confidence ?? 1) < 0.65);
+    extractedTasks.splice(0, extractedTasks.length, ...extractedTasks.filter(t => (t.confidence ?? 1) >= 0.65));
+    await log("claude-analysis", "ok", `${extractedTasks.length} tasks from ${unseenEmails.length} unseen threads (${lowConf.length} dropped — low confidence, was ${beforeConfFilter})`);
 
     // Collapse related tasks within this batch (same ticket, active/passive variations, same project+action)
     const collapsed = await collapseRelatedTasks([...extractedTasks]);
