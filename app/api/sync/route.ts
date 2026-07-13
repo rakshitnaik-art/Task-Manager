@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db";
-import { fetchRecentEmails, fetchUpcomingEvents, fetchRecentDocs, fetchPinnedSheets } from "@/lib/google";
+import { fetchRecentEmailThreads, fetchUpcomingEvents, fetchRecentDocs, fetchPinnedSheets } from "@/lib/google";
 import { fetchRecentSlackMessages } from "@/lib/slack";
 import { fetchGranolaMeetings } from "@/lib/granola";
 import { analyzeAndExtractTasks, collateTaskContext, checkExclusionRules, deduplicateTasks, mapCallToTasks, groupTasksByProject, ExtractedTask } from "@/lib/claude";
@@ -12,7 +12,7 @@ export async function POST() {
 
   // Fetch all data sources in parallel — emails go back 60 days
   const [emails, events, docs, pinnedSheets, slackMessages, granolaCalls] = await Promise.allSettled([
-    fetchRecentEmails(60, 200),
+    fetchRecentEmailThreads(60, 60),
     fetchUpcomingEvents(),
     fetchRecentDocs(),
     fetchPinnedSheets(),
@@ -28,7 +28,7 @@ export async function POST() {
   const granolaData = granolaCalls.status === "fulfilled" ? granolaCalls.value : (errors.push("granola"), []);
 
   await Promise.all([
-    log("gmail", emails.status === "fulfilled" ? "ok" : "error", `${emailData.length} emails`),
+    log("gmail", emails.status === "fulfilled" ? "ok" : "error", `${emailData.length} threads`),
     log("calendar", events.status === "fulfilled" ? "ok" : "error"),
     log("drive", docs.status === "fulfilled" ? "ok" : "error"),
     log("sheets", pinnedSheets.status === "fulfilled" ? "ok" : "error", `${pinnedSheetData.length} sheets`),
@@ -41,6 +41,13 @@ export async function POST() {
   const EMAIL_CHUNK = 40;
 
   try {
+    // Fetch recently completed tasks for recurring task detection
+    const recentDone = await prisma.task.findMany({
+      where: { status: "done", updatedAt: { gte: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000) } },
+      select: { title: true },
+    });
+    const recentDoneTasks = recentDone.map(t => t.title);
+
     // First pass: non-email sources + first email chunk
     const firstChunk = emailData.slice(0, EMAIL_CHUNK);
     const firstBatch = await analyzeAndExtractTasks({
@@ -48,6 +55,7 @@ export async function POST() {
       events: eventData,
       docs: [...docData, ...pinnedSheetData],
       slackMessages: slackData,
+      recentDoneTasks,
     });
     extractedTasks.push(...firstBatch);
 
@@ -59,11 +67,12 @@ export async function POST() {
         events: [],
         docs: [],
         slackMessages: [],
+        recentDoneTasks,
       });
       extractedTasks.push(...batch);
     }
 
-    await log("claude-analysis", "ok", `${extractedTasks.length} tasks from ${emailData.length} emails`);
+    await log("claude-analysis", "ok", `${extractedTasks.length} tasks from ${emailData.length} threads`);
 
     // Collate context from Slack messages and Granola meetings into each task
     const meetings = granolaData;
@@ -185,7 +194,7 @@ export async function POST() {
 
   return Response.json({
     ok: true,
-    emailsFetched: emailData.length,
+    threadsFetched: emailData.length,
     tasksExtracted: extractedTasks.length,
     callsSynced: granolaData.length,
     errors,

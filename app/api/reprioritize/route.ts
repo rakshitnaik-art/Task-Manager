@@ -4,7 +4,7 @@ import { reprioritizeTasks } from "@/lib/claude";
 export async function POST() {
   const tasks = await prisma.task.findMany({
     where: { status: "open" },
-    select: { id: true, priority: true, deadline: true, createdAt: true },
+    select: { id: true, priority: true, deadline: true, createdAt: true, title: true, description: true },
   });
 
   const updates = reprioritizeTasks(tasks);

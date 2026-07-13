@@ -23,10 +23,15 @@ export interface CallMapping {
 }
 
 export async function analyzeAndExtractTasks(data: {
-  emails: Array<{ id: string; subject: string; from: string; date: string; snippet: string }>;
+  emails: Array<{
+    id: string; subject: string; from: string; date: string; snippet: string;
+    body?: string; messageCount?: number; needsFollowUp?: boolean;
+    daysSinceLastMsg?: number; lastSender?: string;
+  }>;
   events: Array<{ id: string; title: string; start: string; description: string; attendees: string[] }>;
   docs: Array<{ id: string; name: string; type: string; modifiedAt: string; url: string }>;
   slackMessages: Array<{ channel: string; text: string; ts: string; user: string }>;
+  recentDoneTasks?: string[];
 }): Promise<ExtractedTask[]> {
   const prompt = `You are a productivity assistant for a senior Product Manager. Extract actionable tasks from the data below.
 
@@ -44,20 +49,30 @@ INCLUDE these:
 - Docs/sheets that have open items, comments, or next steps
 - Anything with a deadline or a stakeholder waiting on the PM
 - Emails where the PM is CC'd but the context implies they own the item
+- Threads marked needsFollowUp:true — create a "Follow up with [sender name] on [topic]" task and set priority high
 
-For each task:
-- title: verb-first (e.g. "Review Q3 PRD", "Respond to Ankit re: pricing")
-- description: what needs to be done and why
-- priority: "critical" (today/blocking), "high" (this week, key stakeholder), "medium" (should do soon), "low" (nice to have)
+PRIORITY RULES (in order of precedence):
+1. "critical" — deadline within 2 days, OR body/subject contains: urgent, ASAP, blocking, by EOD, by end of day, P0, immediately, escalated
+2. "high" — deadline within 7 days, OR key stakeholder waiting, OR needsFollowUp thread
+3. "medium" — should do this week, no hard deadline
+4. "low" — nice to have, no urgency
+
+RECURRING TASK DETECTION:
+If recentDoneTasks is provided, check if a new task is semantically the same as something already done (same action + same subject). If so, skip it — do not create a duplicate. However if a recurring task reappears after 5+ days, it may be a new occurrence — include it with a note.
+
+For each task use:
+- title: verb-first (e.g. "Review Q3 PRD", "Respond to Ankit re: pricing", "Follow up with Brian on Hertz intake form")
+- description: what needs doing and why — use the full email body (body field) not just the snippet
+- priority: per rules above
 - impact: one-line business impact
 - deadline: ISO date string if mentioned, otherwise omit
-- source: "email" | "slack" | "doc" | "sheet" | "calendar" (use "slack" if the email is a Slack notification from slack.com)
-- sourceRef: message ID or doc ID
+- source: "email" | "slack" | "doc" | "sheet" | "calendar"
+- sourceRef: thread ID or doc ID
 
 DATA:
 ${JSON.stringify(data, null, 2)}
 
-Return a JSON array. Max 15 tasks. Return ONLY valid JSON, no markdown.`;
+Return a JSON array. Max 20 tasks. Return ONLY valid JSON, no markdown.`;
 
   const response = await anthropic.messages.create({
     model: "claude-sonnet-4-6",
@@ -292,11 +307,13 @@ Return ONLY valid JSON, no markdown.`,
   }
 }
 
-export function reprioritizeTasks(tasks: Array<{ id: string; priority: string; deadline: Date | null; createdAt: Date }>): Array<{ id: string; newPriority: string }> {
+export function reprioritizeTasks(tasks: Array<{ id: string; priority: string; deadline: Date | null; createdAt: Date; title: string; description?: string | null }>): Array<{ id: string; newPriority: string }> {
   const now = new Date();
   const twoDays = 2 * 24 * 60 * 60 * 1000;
   const sevenDays = 7 * 24 * 60 * 60 * 1000;
   const thirtyDays = 30 * 24 * 60 * 60 * 1000;
+  const urgentKeywords = ['urgent', 'asap', 'blocking', 'by eod', 'end of day', 'critical', 'immediately', 'stat', 'p0', 'escalated'];
+  const priorityBump: Record<string, string> = { low: 'medium', medium: 'high', high: 'critical', critical: 'critical' };
 
   return tasks.map(task => {
     if (task.deadline) {
@@ -307,6 +324,10 @@ export function reprioritizeTasks(tasks: Array<{ id: string; priority: string; d
       const age = now.getTime() - task.createdAt.getTime();
       if (age > thirtyDays && task.priority === "low") return { id: task.id, newPriority: "low" };
       if (age > thirtyDays && task.priority === "medium") return { id: task.id, newPriority: "low" };
+    }
+    const text = `${task.title} ${task.description || ''}`.toLowerCase();
+    if (urgentKeywords.some(k => text.includes(k))) {
+      return { id: task.id, newPriority: priorityBump[task.priority] || task.priority };
     }
     return { id: task.id, newPriority: task.priority };
   });

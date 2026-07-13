@@ -1,6 +1,35 @@
 import { google } from "googleapis";
 import { prisma } from "./db";
 
+function decodeBase64Url(data: string): string {
+  try {
+    return Buffer.from(data.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf-8');
+  } catch {
+    return '';
+  }
+}
+
+function extractTextFromPayload(payload: unknown): string {
+  const p = payload as { mimeType?: string; body?: { data?: string }; parts?: unknown[] };
+  if (!p) return '';
+  if (p.body?.data) {
+    const text = decodeBase64Url(p.body.data);
+    if (p.mimeType === 'text/plain') return text;
+    if (p.mimeType === 'text/html') return text.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+  }
+  if (p.parts) {
+    const plain = p.parts.find((x: unknown) => (x as { mimeType?: string }).mimeType === 'text/plain');
+    if (plain) return extractTextFromPayload(plain);
+    const html = p.parts.find((x: unknown) => (x as { mimeType?: string }).mimeType === 'text/html');
+    if (html) return extractTextFromPayload(html);
+    for (const part of p.parts) {
+      const text = extractTextFromPayload(part);
+      if (text) return text;
+    }
+  }
+  return '';
+}
+
 const SCOPES = [
   "https://www.googleapis.com/auth/gmail.readonly",
   "https://www.googleapis.com/auth/calendar.readonly",
@@ -50,49 +79,69 @@ export async function getAuthenticatedClient() {
   return oauth2Client;
 }
 
-export async function fetchRecentEmails(days = 60, maxResults = 200) {
+export async function fetchRecentEmailThreads(days = 60, maxThreads = 60) {
   const auth = await getAuthenticatedClient();
   if (!auth) return [];
 
-  const gmail = google.gmail({ version: "v1", auth });
+  const gmail = google.gmail({ version: 'v1', auth });
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
   const query = `after:${Math.floor(since.getTime() / 1000)} -category:promotions -category:social -from:aira@capillarytech.com -from:dlf.in -subject:FTP -subject:ftp -subject:FTP_IMPORT -subject:"cron job" -subject:"connection failure" -subject:"import alert" -subject:"pre-reminder" -subject:aiRA -subject:aira -subject:"DLF" -subject:"copilot error" -subject:"cluster" -from:bhaskar.priyadarshi@capillarytech.com -from:harsh.deo@capillarytech.com (-category:updates OR from:slack.com)`;
 
-  const listRes = await gmail.users.messages.list({
-    userId: "me",
-    q: query,
-    maxResults,
-  });
+  const [profileRes, listRes] = await Promise.all([
+    gmail.users.getProfile({ userId: 'me' }),
+    gmail.users.threads.list({ userId: 'me', q: query, maxResults: maxThreads }),
+  ]);
 
-  const messages = listRes.data.messages || [];
+  const myEmail = profileRes.data.emailAddress?.toLowerCase() || '';
+  const threads = listRes.data.threads || [];
   const results = [];
 
-  // Fetch details in parallel batches of 10 to stay within rate limits
-  const toFetch = messages.slice(0, 100);
-  const batchSize = 10;
-
-  for (let i = 0; i < toFetch.length; i += batchSize) {
-    const batch = toFetch.slice(i, i + batchSize);
+  const batchSize = 5;
+  for (let i = 0; i < threads.length; i += batchSize) {
+    const batch = threads.slice(i, i + batchSize);
     const batchResults = await Promise.allSettled(
-      batch.map((msg) =>
-        gmail.users.messages.get({
-          userId: "me",
-          id: msg.id!,
-          format: "metadata",
-          metadataHeaders: ["Subject", "From", "Date"],
-        })
-      )
+      batch.map(t => gmail.users.threads.get({ userId: 'me', id: t.id!, format: 'full' }))
     );
 
     for (const res of batchResults) {
-      if (res.status !== "fulfilled") continue;
-      const detail = res.value;
-      const headers = detail.data.payload?.headers || [];
-      const subject = headers.find((h) => h.name === "Subject")?.value || "(no subject)";
-      const from = headers.find((h) => h.name === "From")?.value || "";
-      const date = headers.find((h) => h.name === "Date")?.value || "";
-      const snippet = detail.data.snippet || "";
-      results.push({ id: detail.data.id!, subject, from, date, snippet });
+      if (res.status !== 'fulfilled') continue;
+      const thread = res.value.data;
+      const messages = thread.messages || [];
+      if (messages.length === 0) continue;
+
+      const firstMsg = messages[0];
+      const headers = firstMsg.payload?.headers || [];
+      const subject = headers.find(h => h.name === 'Subject')?.value || '(no subject)';
+      const from = headers.find(h => h.name === 'From')?.value || '';
+      const date = headers.find(h => h.name === 'Date')?.value || '';
+
+      const lastMsg = messages[messages.length - 1];
+      const lastHeaders = lastMsg.payload?.headers || [];
+      const lastFrom = lastHeaders.find(h => h.name === 'From')?.value?.toLowerCase() || '';
+      const lastDate = lastHeaders.find(h => h.name === 'Date')?.value || '';
+      const sentByMe = !!myEmail && lastFrom.includes(myEmail);
+      const daysSinceLast = lastDate ? (Date.now() - new Date(lastDate).getTime()) / (1000 * 60 * 60 * 24) : 0;
+      const needsFollowUp = sentByMe && daysSinceLast >= 3;
+
+      let combinedBody = '';
+      for (const msg of messages) {
+        const body = extractTextFromPayload(msg.payload).slice(0, 600);
+        if (body) combinedBody += body + '\n---\n';
+        if (combinedBody.length > 2500) break;
+      }
+
+      results.push({
+        id: thread.id!,
+        subject,
+        from,
+        date,
+        snippet: firstMsg.snippet || '',
+        body: combinedBody.slice(0, 2500).trim(),
+        messageCount: messages.length,
+        needsFollowUp,
+        lastSender: lastFrom,
+        daysSinceLastMsg: Math.floor(daysSinceLast),
+      });
     }
   }
 
