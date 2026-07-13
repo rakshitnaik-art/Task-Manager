@@ -30,7 +30,7 @@ function extractTextFromPayload(payload: unknown): string {
   return '';
 }
 
-const SCOPES = [
+export const SCOPES = [
   "https://www.googleapis.com/auth/gmail.readonly",
   "https://www.googleapis.com/auth/calendar.readonly",
   "https://www.googleapis.com/auth/drive.readonly",

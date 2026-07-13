@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { getOAuthClient } from "@/lib/google";
+import { google } from "googleapis";
 import { prisma } from "@/lib/db";
 import { redirect } from "next/navigation";
 
@@ -9,7 +9,16 @@ export async function GET(req: NextRequest) {
     return Response.json({ error: "No code provided" }, { status: 400 });
   }
 
-  const oauth2Client = getOAuthClient();
+  const proto = req.headers.get("x-forwarded-proto") || "http";
+  const host = req.headers.get("x-forwarded-host") || req.headers.get("host") || "localhost:3001";
+  const redirectUri = `${proto}://${host}/api/auth/google/callback`;
+
+  const oauth2Client = new google.auth.OAuth2(
+    process.env.GOOGLE_CLIENT_ID,
+    process.env.GOOGLE_CLIENT_SECRET,
+    redirectUri
+  );
+
   const { tokens } = await oauth2Client.getToken(code);
 
   await prisma.oAuthToken.upsert({
