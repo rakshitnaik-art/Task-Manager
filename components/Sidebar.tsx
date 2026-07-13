@@ -7,6 +7,7 @@ const nav = [
   { href: "/", label: "Today", icon: "☀️" },
   { href: "/week", label: "This Week", icon: "📆" },
   { href: "/calls", label: "Calls", icon: "🎙️" },
+  { href: "/chat", label: "Assistant", icon: "💬" },
   { href: "/settings", label: "Settings", icon: "⚙️" },
 ];
 
