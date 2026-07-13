@@ -47,6 +47,7 @@ export default function TodayPage() {
   const [syncing, setSyncing] = useState(false);
   const [lastSync, setLastSync] = useState<string | null>(null);
   const [view, setView] = useState<View>("today");
+  const [overdueOnly, setOverdueOnly] = useState(false);
   const [chatInput, setChatInput] = useState("");
   const [chatLoading, setChatLoading] = useState(false);
   const [chatError, setChatError] = useState<string | null>(null);
@@ -158,7 +159,11 @@ export default function TodayPage() {
     if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleChat();
   };
 
-  const sorted = [...tasks].sort((a, b) =>
+  const now = new Date();
+  const filtered = overdueOnly
+    ? tasks.filter(t => t.deadline && new Date(t.deadline) < now)
+    : tasks;
+  const sorted = [...filtered].sort((a, b) =>
     (priorityOrder[a.priority] ?? 4) - (priorityOrder[b.priority] ?? 4)
   );
   const groups = groupByLabel(sorted);
@@ -188,9 +193,12 @@ export default function TodayPage() {
               <span>✓</span> <span><strong>{stats.doneThisWeek}</strong> done this week</span>
             </div>
             {stats.overdue > 0 && (
-              <div className="flex items-center gap-2 px-3 py-1.5 bg-red-500/10 border border-red-500/20 rounded-lg text-xs text-red-400">
-                <span>⚠</span> <span><strong>{stats.overdue}</strong> overdue</span>
-              </div>
+              <button
+                onClick={() => setOverdueOnly(v => !v)}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${overdueOnly ? "bg-red-500/30 border border-red-500/60 text-red-300" : "bg-red-500/10 border border-red-500/20 text-red-400 hover:bg-red-500/20"}`}
+              >
+                <span>⚠</span> <span><strong>{stats.overdue}</strong> overdue{overdueOnly ? " — showing only" : ""}</span>
+              </button>
             )}
           </div>
         )}

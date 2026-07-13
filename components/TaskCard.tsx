@@ -184,7 +184,15 @@ export default function TaskCard({ task, onDone, onDelete, onUpdate, onSnooze }:
 
               <div className="flex flex-wrap items-center gap-3 text-xs text-zinc-500">
                 {task.impact && <span className="flex items-center gap-1"><span className="text-indigo-400">⚡</span>{task.impact}</span>}
-                {task.deadline && <span className="flex items-center gap-1">🗓️ {format(new Date(task.deadline), "MMM d")}</span>}
+                {task.deadline && (() => {
+                  const isOverdue = new Date(task.deadline) < new Date();
+                  return (
+                    <span className={`flex items-center gap-1 font-medium ${isOverdue ? "text-red-400" : ""}`}>
+                      {isOverdue ? "⚠️ Overdue · " : "🗓️ "}
+                      {format(new Date(task.deadline), "MMM d")}
+                    </span>
+                  );
+                })()}
                 {task.rawContext && (
                   <button onClick={() => setExpanded(!expanded)} className="flex items-center gap-1 text-zinc-600 hover:text-zinc-400 transition-colors">
                     {expanded ? "▲ Hide context" : "▼ Show context"}

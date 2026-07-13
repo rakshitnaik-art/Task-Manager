@@ -249,7 +249,12 @@ export async function deduplicateTasks(newTasks: ExtractedTask[], existingTitles
     max_tokens: 512,
     messages: [{
       role: "user",
-      content: `Remove duplicates from the new tasks list. A task is a duplicate if it is semantically equivalent to an existing task (same action, same subject).
+      content: `Remove duplicates from the new tasks list. A task is a duplicate if it meets ANY of these conditions:
+- Semantically equivalent to an existing task (same action, same subject)
+- About the same ticket/issue ID (e.g. CAP-195904, PSV-123) as an existing task — even if the action is slightly different
+- Clearly a subset or follow-on step of an existing task about the same entity
+
+When multiple NEW TASKS are about the same ticket/entity, keep only the most comprehensive one (most detail, highest priority).
 
 EXISTING TASKS:
 ${existingTitles.slice(0, 30).map((t, i) => `${i}. ${t}`).join("\n")}
@@ -257,7 +262,7 @@ ${existingTitles.slice(0, 30).map((t, i) => `${i}. ${t}`).join("\n")}
 NEW TASKS:
 ${newTasks.map((t, i) => `${i}. ${t.title}`).join("\n")}
 
-Return a JSON array of indices from NEW TASKS that are NOT duplicates. Example: [0, 2, 4]
+Return a JSON array of indices from NEW TASKS that are NOT duplicates (keep only one per ticket/entity). Example: [0, 2, 4]
 Return ONLY valid JSON array, no markdown.`
     }],
   });
