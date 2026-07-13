@@ -15,6 +15,22 @@ const SUGGESTIONS = [
   "Never show me FTP monitoring alerts again",
 ];
 
+const URL_REGEX = /(https?:\/\/[^\s)]+)/g;
+
+function renderWithLinks(text: string) {
+  const parts = text.split(URL_REGEX);
+  return parts.map((part, i) =>
+    URL_REGEX.test(part) ? (
+      <a key={i} href={part} target="_blank" rel="noopener noreferrer"
+        className="text-indigo-400 underline underline-offset-2 hover:text-indigo-300 break-all">
+        {part}
+      </a>
+    ) : (
+      <span key={i}>{part}</span>
+    )
+  );
+}
+
 function MessageBubble({ msg }: { msg: Message }) {
   const isUser = msg.role === "user";
   return (
@@ -31,7 +47,7 @@ function MessageBubble({ msg }: { msg: Message }) {
             : "bg-zinc-800 text-zinc-100 rounded-tl-sm"
         }`}
       >
-        {msg.content}
+        {isUser ? msg.content : renderWithLinks(msg.content)}
       </div>
     </div>
   );

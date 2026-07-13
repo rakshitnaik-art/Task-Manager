@@ -81,3 +81,12 @@ model SyncLog {
   message  String?
   syncedAt DateTime @default(now())
 }
+
+model ProjectContext {
+  id           String   @id @default(cuid())
+  projectLabel String
+  url          String?
+  title        String?
+  note         String?
+  createdAt    DateTime @default(now())
+}

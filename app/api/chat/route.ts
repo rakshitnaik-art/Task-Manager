@@ -4,6 +4,20 @@ import { prisma } from "@/lib/db";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
+// Auto-create table on first use — no manual migration needed
+async function ensureProjectContextTable() {
+  await prisma.$executeRaw`
+    CREATE TABLE IF NOT EXISTS "ProjectContext" (
+      "id" TEXT NOT NULL PRIMARY KEY,
+      "projectLabel" TEXT NOT NULL,
+      "url" TEXT,
+      "title" TEXT,
+      "note" TEXT,
+      "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+  `;
+}
+
 const tools: Anthropic.Tool[] = [
   {
     name: "create_task",
@@ -20,12 +34,35 @@ const tools: Anthropic.Tool[] = [
     },
   },
   {
-    name: "add_exclusion_rule",
-    description: "Tell future syncs to never surface tasks matching a pattern. Use when the user says they don't want to see certain types of tasks in future.",
+    name: "save_project_context",
+    description: "Save URLs, docs, or notes as context for a project. Use when the user shares links or reference material they want associated with a project name.",
     input_schema: {
       type: "object" as const,
       properties: {
-        pattern: { type: "string", description: "One sentence describing what to exclude, e.g. 'FTP monitoring alerts from automated systems'" },
+        projectLabel: { type: "string", description: "The project name, e.g. 'Beacon', 'Comcast Onboarding'" },
+        items: {
+          type: "array",
+          description: "List of URLs or notes to save",
+          items: {
+            type: "object",
+            properties: {
+              url: { type: "string", description: "The URL" },
+              title: { type: "string", description: "Short label for what this link is, e.g. 'Analytics Dashboard', 'PRD Doc'" },
+              note: { type: "string", description: "Optional note about this resource" },
+            },
+          },
+        },
+      },
+      required: ["projectLabel", "items"],
+    },
+  },
+  {
+    name: "add_exclusion_rule",
+    description: "Tell future syncs to never surface tasks matching a pattern. Use when the user says they don't want certain types of tasks to appear.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        pattern: { type: "string", description: "One sentence describing what to exclude" },
         intent: { type: "string", description: "Why this is noise for the PM" },
         keywords: { type: "array", items: { type: "string" }, description: "Keywords that identify this pattern" },
       },
@@ -38,14 +75,14 @@ const tools: Anthropic.Tool[] = [
     input_schema: {
       type: "object" as const,
       properties: {
-        taskIds: { type: "array", items: { type: "string" }, description: "Array of task IDs to mark done" },
+        taskIds: { type: "array", items: { type: "string" } },
       },
       required: ["taskIds"],
     },
   },
   {
     name: "snooze_task",
-    description: "Snooze a task until a future date so it stops appearing until then.",
+    description: "Snooze a task until a future date.",
     input_schema: {
       type: "object" as const,
       properties: {
@@ -70,6 +107,20 @@ async function runTool(name: string, input: Record<string, unknown>): Promise<st
       },
     });
     return JSON.stringify({ ok: true, id: task.id, title: task.title });
+  }
+
+  if (name === "save_project_context") {
+    await ensureProjectContextTable();
+    const items = input.items as Array<{ url?: string; title?: string; note?: string }>;
+    const label = input.projectLabel as string;
+    for (const item of items) {
+      const id = crypto.randomUUID();
+      await prisma.$executeRaw`
+        INSERT INTO "ProjectContext" ("id", "projectLabel", "url", "title", "note", "createdAt")
+        VALUES (${id}, ${label}, ${item.url ?? null}, ${item.title ?? null}, ${item.note ?? null}, datetime('now'))
+      `;
+    }
+    return JSON.stringify({ ok: true, saved: items.length, projectLabel: label });
   }
 
   if (name === "add_exclusion_rule") {
@@ -105,14 +156,24 @@ export async function POST(req: NextRequest) {
     messages: Array<{ role: "user" | "assistant"; content: string }>;
   };
 
-  const [tasks, exclusions] = await Promise.all([
+  await ensureProjectContextTable();
+
+  const [tasks, exclusions, contextRows] = await Promise.all([
     prisma.task.findMany({
       where: { status: "open" },
       orderBy: [{ priority: "asc" }, { deadline: "asc" }],
       select: { id: true, title: true, priority: true, deadline: true, projectLabel: true, description: true, createdAt: true },
     }),
     prisma.exclusionRule.findMany({ select: { pattern: true }, take: 20 }),
+    prisma.$queryRaw`SELECT projectLabel, url, title, note FROM "ProjectContext" ORDER BY createdAt DESC` as Promise<Array<{ projectLabel: string; url: string | null; title: string | null; note: string | null }>>,
   ]);
+
+  // Group project contexts by label
+  const contextByProject: Record<string, Array<{ url?: string; title?: string; note?: string }>> = {};
+  for (const row of contextRows) {
+    if (!contextByProject[row.projectLabel]) contextByProject[row.projectLabel] = [];
+    contextByProject[row.projectLabel].push({ url: row.url ?? undefined, title: row.title ?? undefined, note: row.note ?? undefined });
+  }
 
   const today = new Date();
   const priorityOrder = ["critical", "high", "medium", "low"];
@@ -129,27 +190,37 @@ export async function POST(req: NextRequest) {
     return `- [${t.id}] [${t.priority.toUpperCase()}]${overdue} ${t.title}${deadline}${project}`;
   }).join("\n");
 
+  const projectContextSection = Object.entries(contextByProject).length > 0
+    ? "\nPROJECT REFERENCE DOCS:\n" + Object.entries(contextByProject).map(([label, items]) =>
+        `${label}:\n` + items.map(i => `  - ${i.title || "Link"}: ${i.url || ""}${i.note ? ` (${i.note})` : ""}`).join("\n")
+      ).join("\n")
+    : "";
+
   const system = `You are a smart productivity assistant for Rakshit Naik, a senior Product Manager at Capillary Tech.
 
 TODAY: ${today.toISOString().slice(0, 10)}
 
 OPEN TASKS (${tasks.length} total):
 ${taskList || "No open tasks."}
+${projectContextSection}
 
 ACTIVE EXCLUSION RULES:
 ${exclusions.map(e => `- ${e.pattern}`).join("\n") || "None"}
 
 You can:
-- Answer questions about the task list (what's overdue, what to focus on, breakdowns by project/priority)
-- Create new tasks the user mentions ("add a task to call Ankit tomorrow")
-- Add exclusion rules when the user says they don't want certain tasks to appear in future syncs ("never show me FTP alerts again", "exclude automated reports")
-- Mark tasks as done or snooze them
+- Answer questions about tasks (what's overdue, what to focus on, project breakdowns)
+- Create new tasks the user mentions
+- Save URLs/docs as reference context for a project — when user shares links for a project, use save_project_context
+- Add exclusion rules when user says to stop surfacing certain types of tasks
+- Mark tasks done or snooze them
+- When discussing a project, include relevant reference docs from PROJECT REFERENCE DOCS in your answer
 
 RULES:
-- When asked what to work on first: overdue tasks > critical > high priority > earliest deadline
-- When user says "never show me X" or "exclude X": use add_exclusion_rule
-- Be concise. Use bullet points for lists. No filler phrases.
-- When you create a task or exclusion rule, confirm it with a short message.`;
+- When asked what to work on first: overdue > critical > high > earliest deadline
+- When user says "never show me X" or "exclude X from future syncs" → add_exclusion_rule
+- When user shares URLs for a project ("here are the Beacon docs") → save_project_context
+- When answering about a project that has saved docs → mention them with their URLs
+- Be concise. Bullet points for lists. No filler phrases.`;
 
   const apiMessages: Anthropic.MessageParam[] = messages.map(m => ({
     role: m.role,
