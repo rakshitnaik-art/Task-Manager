@@ -22,6 +22,8 @@ function SettingsContent() {
   const [slackMsg, setSlackMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [exclusions, setExclusions] = useState<Array<{id: string; pattern: string; intent: string; createdAt: string}>>([]);
   const [newRule, setNewRule] = useState("");
+  const [syncLogs, setSyncLogs] = useState<Array<{id: string; source: string; status: string; message: string | null; syncedAt: string}>>([]);
+  const [logsOpen, setLogsOpen] = useState(false);
 
   async function saveSlackToken() {
     setSlackSaving(true);
@@ -58,6 +60,7 @@ function SettingsContent() {
 
   useEffect(() => {
     fetch("/api/exclusions").then(r => r.json()).then(setExclusions).catch(() => {});
+    fetch("/api/sync-logs").then(r => r.json()).then(setSyncLogs).catch(() => {});
   }, []);
 
   const addRule = async () => {
@@ -251,6 +254,42 @@ function SettingsContent() {
             6. Hit <strong className="text-white">Sync now</strong> on the Today page
           </p>
         </div>
+      </div>
+
+      <div className="mt-8 rounded-xl border border-zinc-800 bg-zinc-900 overflow-hidden">
+        <button
+          onClick={() => setLogsOpen(v => !v)}
+          className="w-full flex items-center justify-between p-4 text-left hover:bg-zinc-800/50 transition-colors"
+        >
+          <div>
+            <h2 className="text-sm font-semibold text-white">Sync Logs <span className="text-zinc-500 font-normal">({syncLogs.length})</span></h2>
+            <p className="text-xs text-zinc-500 mt-0.5">What happened during the last sync</p>
+          </div>
+          <span className="text-zinc-500 text-xs">{logsOpen ? "▲ Hide" : "▼ Show"}</span>
+        </button>
+        {logsOpen && (
+          <div className="border-t border-zinc-800 p-4">
+            {syncLogs.length === 0 ? (
+              <p className="text-xs text-zinc-600 text-center py-4">No sync logs yet. Hit Sync now to start.</p>
+            ) : (
+              <div className="space-y-1 font-mono">
+                {syncLogs.map(log => {
+                  const isError = log.status === "error";
+                  const time = new Date(log.syncedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+                  return (
+                    <div key={log.id} className={`flex items-start gap-2 text-xs py-1 border-b border-zinc-800/50 last:border-0 ${isError ? "text-red-400" : "text-zinc-400"}`}>
+                      <span className="shrink-0 text-zinc-600">{time}</span>
+                      <span className={`shrink-0 w-3 ${isError ? "text-red-400" : "text-green-400"}`}>{isError ? "✕" : "✓"}</span>
+                      <span className="shrink-0 text-zinc-300 w-28">{log.source}</span>
+                      <span className={isError ? "text-red-400" : "text-zinc-500"}>{log.message || (isError ? "failed" : "ok")}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            <button onClick={() => fetch("/api/sync-logs", { method: "DELETE" }).then(() => setSyncLogs([]))} className="mt-3 text-xs text-zinc-600 hover:text-red-400 transition-colors">Clear logs</button>
+          </div>
+        )}
       </div>
 
       <div className="mt-8 p-4 rounded-xl border border-zinc-800 bg-zinc-900">

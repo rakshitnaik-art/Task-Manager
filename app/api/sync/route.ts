@@ -10,12 +10,16 @@ export async function POST() {
     await prisma.syncLog.create({ data: { source, status, message: message || null } });
   };
 
-  // Incremental email fetch — only pull threads since last successful sync
+  // Incremental email fetch — only pull threads since last successful sync,
+  // but always look back at least 2 hours so a rapid re-sync never misses recent emails
   const lastEmailSync = await prisma.syncLog.findFirst({
     where: { source: "gmail", status: "ok" },
     orderBy: { syncedAt: "desc" },
   });
-  const emailSince = lastEmailSync?.syncedAt;
+  const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
+  const emailSince = lastEmailSync && lastEmailSync.syncedAt > twoHoursAgo
+    ? twoHoursAgo
+    : lastEmailSync?.syncedAt;
 
   // Fetch all data sources in parallel
   const [emails, events, docs, pinnedSheets, slackMessages, granolaCalls] = await Promise.allSettled([
