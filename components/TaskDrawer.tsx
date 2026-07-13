@@ -71,7 +71,6 @@ function LinkChip({ url, label }: { url: string; label: string }) {
 export default function TaskDrawer({ taskId, onClose }: { taskId: string; onClose: () => void }) {
   const [data, setData] = useState<DetailData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [showRaw, setShowRaw] = useState(false);
 
   useEffect(() => {
     setLoading(true);
@@ -217,21 +216,11 @@ export default function TaskDrawer({ taskId, onClose }: { taskId: string; onClos
               </section>
             )}
 
-            {/* Raw context (collapsible) */}
+            {/* Context summary */}
             {task.rawContext && (
               <section>
-                <button
-                  onClick={() => setShowRaw(v => !v)}
-                  className="flex items-center gap-2 text-xs text-zinc-600 hover:text-zinc-400 transition-colors mb-2"
-                >
-                  <span>{showRaw ? "▲" : "▼"}</span>
-                  <span className="font-semibold uppercase tracking-wider">Raw Context</span>
-                </button>
-                {showRaw && (
-                  <div className="p-3 bg-zinc-900 border border-zinc-800 rounded-lg text-xs text-zinc-500 leading-relaxed whitespace-pre-wrap max-h-64 overflow-y-auto font-mono">
-                    {task.rawContext}
-                  </div>
-                )}
+                <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2">Context</h3>
+                <p className="text-sm text-zinc-400 leading-relaxed">{task.rawContext}</p>
               </section>
             )}
 

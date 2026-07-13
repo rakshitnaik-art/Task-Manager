@@ -85,6 +85,7 @@ If recentDoneTasks lists something semantically identical (same action + same su
 - deadline: ISO date if mentioned, otherwise omit
 - source: "email" | "slack" | "doc" | "sheet" | "calendar"
 - sourceRef: thread ID or doc ID
+- rawContext: 2–3 sentence plain-English summary of the source. Who sent it, what the thread/doc is about, and what the specific ask is. Do NOT paste the original text — summarise it.
 
 DATA:
 ${JSON.stringify(data, null, 2)}
@@ -170,7 +171,7 @@ ${JSON.stringify(meetings.map((m) => ({ title: m.title, startedAt: m.startedAt, 
 Return a JSON array with one entry per task (same order, same index). For each:
 - index: the task index
 - description: enriched description combining the original + any relevant Slack/meeting context. If nothing related was found, return the original description unchanged.
-- rawContext: a brief summary of what was found across sources (e.g. "Email thread started X. Discussed on Slack in #channel. Covered in meeting Y on date Z.")
+- rawContext: 2–3 sentence plain-English summary of the full context trail. Format: "Email from [name] on [date] asked [what]. [Optional: Discussed on Slack in #channel on date.] [Optional: Covered in [meeting name] on date with [attendees].]" — never paste raw text, always summarise.
 
 Return ONLY valid JSON array like: [{ "index": 0, "description": "...", "rawContext": "..." }, ...]
 No markdown.`;
