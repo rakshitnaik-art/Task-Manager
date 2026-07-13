@@ -65,6 +65,7 @@ export async function getAuthenticatedClient() {
     expiry_date: token.expiresAt?.getTime(),
   });
 
+  // Save refreshed tokens back to DB whenever Google issues new ones
   oauth2Client.on("tokens", async (tokens) => {
     await prisma.oAuthToken.update({
       where: { provider: "google" },
@@ -75,6 +76,24 @@ export async function getAuthenticatedClient() {
       },
     });
   });
+
+  // Proactively refresh if expired or expiring within 5 minutes
+  const expiresAt = token.expiresAt?.getTime() ?? 0;
+  if (token.refreshToken && expiresAt < Date.now() + 5 * 60 * 1000) {
+    try {
+      const { credentials } = await oauth2Client.refreshAccessToken();
+      oauth2Client.setCredentials(credentials);
+      await prisma.oAuthToken.update({
+        where: { provider: "google" },
+        data: {
+          accessToken: credentials.access_token!,
+          ...(credentials.expiry_date && { expiresAt: new Date(credentials.expiry_date) }),
+        },
+      });
+    } catch {
+      // refresh failed — will retry on next API call
+    }
+  }
 
   return oauth2Client;
 }
