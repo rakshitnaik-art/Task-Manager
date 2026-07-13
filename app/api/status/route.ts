@@ -16,6 +16,7 @@ export async function GET() {
       slack: !!slackToken,
       granola: isGranolaInstalled(),
       anthropic: !!process.env.ANTHROPIC_API_KEY,
+      db: process.env.TURSO_DATABASE_URL ? "turso" : "local",
       lastSync: lastSync?.syncedAt || null,
       taskCount,
       callCount,
