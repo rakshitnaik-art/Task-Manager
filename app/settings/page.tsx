@@ -63,6 +63,12 @@ function SettingsContent() {
     fetch("/api/sync-logs").then(r => r.json()).then(setSyncLogs).catch(() => {});
   }, []);
 
+  const disconnectGoogle = async () => {
+    await fetch("/api/auth/google/disconnect", { method: "POST" });
+    fetchStatus();
+    window.location.href = "/api/auth/google";
+  };
+
   const addRule = async () => {
     if (!newRule.trim()) return;
     const res = await fetch("/api/exclusions", {
@@ -90,12 +96,14 @@ function SettingsContent() {
     connected,
     connectHref,
     description,
+    onDisconnect,
   }: {
     label: string;
     icon: string;
     connected: boolean;
     connectHref?: string;
     description: string;
+    onDisconnect?: () => void;
   }) => (
     <div className="flex items-center justify-between p-4 rounded-xl border border-zinc-800 bg-zinc-900">
       <div className="flex items-center gap-3">
@@ -107,10 +115,20 @@ function SettingsContent() {
       </div>
 
       {connected ? (
-        <span className="flex items-center gap-1.5 text-xs text-green-400 font-medium">
-          <span className="w-2 h-2 rounded-full bg-green-400" />
-          Connected
-        </span>
+        <div className="flex items-center gap-2">
+          <span className="flex items-center gap-1.5 text-xs text-green-400 font-medium">
+            <span className="w-2 h-2 rounded-full bg-green-400" />
+            Connected
+          </span>
+          {connectHref && onDisconnect && (
+            <button
+              onClick={onDisconnect}
+              className="text-xs px-2 py-1 rounded-lg border border-zinc-700 text-zinc-500 hover:text-red-400 hover:border-red-500/40 transition-colors"
+            >
+              Reconnect
+            </button>
+          )}
+        </div>
       ) : connectHref ? (
         <a
           href={connectHref}
@@ -148,6 +166,7 @@ function SettingsContent() {
           connected={status?.google ?? false}
           connectHref="/api/auth/google"
           description="Pulls emails, calendar events, Docs & Sheets"
+          onDisconnect={disconnectGoogle}
         />
         <div className="rounded-xl border border-zinc-800 bg-zinc-900 overflow-hidden">
           <div className="flex items-center justify-between p-4">
