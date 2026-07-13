@@ -15,6 +15,7 @@ export async function GET() {
       google: !!googleToken,
       slack: !!slackToken,
       granola: isGranolaInstalled(),
+      anthropic: !!process.env.ANTHROPIC_API_KEY,
       lastSync: lastSync?.syncedAt || null,
       taskCount,
       callCount,

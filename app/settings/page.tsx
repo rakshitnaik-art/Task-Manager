@@ -7,6 +7,7 @@ interface Status {
   google: boolean;
   slack: boolean;
   granola: boolean;
+  anthropic: boolean;
   lastSync: string | null;
   taskCount: number;
   callCount: number;
@@ -230,7 +231,7 @@ function SettingsContent() {
           </p>
           <p>
             3.{" "}
-            <span>
+            <span className={status?.anthropic ? "line-through text-zinc-600" : ""}>
               Add <code className="text-indigo-400">ANTHROPIC_API_KEY</code> to <code>.env.local</code>
             </span>
           </p>
