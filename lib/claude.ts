@@ -276,6 +276,50 @@ Return ONLY valid JSON array, no markdown.`
   }
 }
 
+export async function collapseRelatedTasks(tasks: ExtractedTask[]): Promise<ExtractedTask[]> {
+  if (tasks.length <= 1) return tasks;
+
+  const response = await anthropic.messages.create({
+    model: "claude-sonnet-4-6",
+    max_tokens: 4096,
+    system: "You are a precise task consolidation assistant. Return only valid JSON.",
+    messages: [{
+      role: "user",
+      content: `You have tasks extracted from emails, sheets, and calendar. Many are about the same issue phrased differently — active vs passive voice, different angles on the same thread, multiple updates on the same ticket.
+
+Collapse related tasks into single comprehensive tasks.
+
+COLLAPSE when tasks share ANY of:
+- Same ticket/issue ID (CAP-xxx, PSV-xxx, JIRA-xxx, etc.)
+- Same client + same core action ("confirm Hertz X" + "follow up on Hertz X" + "check Hertz X" = one task)
+- Active/passive variations of the same ask ("Review PSV-15212" + "Check PSV-15212 for PM action" = one)
+- Same sheet being reviewed for different sub-reasons (merge into one review task)
+
+When collapsing:
+- Write a single verb-first title that captures the full scope
+- Merge descriptions to include all angles and context
+- Use the HIGHEST priority of the group
+- Use the EARLIEST deadline if any exist
+- Use the source of the most informative task
+
+TASKS (index: title):
+${tasks.map((t, i) => `${i}. [${t.priority}] [${t.source}] ${t.title}\n   ${(t.description || "").slice(0, 200)}`).join("\n\n")}
+
+Return a JSON array. Each element is a final task with fields: title, description, priority, impact, source, sourceRef, deadline (optional).
+Do NOT include tasks that were merged into another — only include the collapsed result.
+Return ONLY valid JSON array, no markdown.`,
+    }],
+  });
+
+  const text = response.content[0].type === "text" ? response.content[0].text : "[]";
+  try {
+    const cleaned = text.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+    return JSON.parse(cleaned) as ExtractedTask[];
+  } catch {
+    return tasks;
+  }
+}
+
 export async function groupTasksByProject(
   tasks: Array<{ id: string; title: string; description?: string | null }>
 ): Promise<Array<{ id: string; projectLabel: string | null }>> {

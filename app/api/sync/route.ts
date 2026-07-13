@@ -2,7 +2,7 @@ import { prisma } from "@/lib/db";
 import { fetchRecentEmailThreads, fetchUpcomingEvents, fetchRecentDocs, fetchPinnedSheets } from "@/lib/google";
 import { fetchRecentSlackMessages } from "@/lib/slack";
 import { fetchGranolaMeetings } from "@/lib/granola";
-import { analyzeAndExtractTasks, collateTaskContext, checkExclusionRules, deduplicateTasks, mapCallToTasks, groupTasksByProject, ExtractedTask } from "@/lib/claude";
+import { analyzeAndExtractTasks, collateTaskContext, checkExclusionRules, deduplicateTasks, collapseRelatedTasks, mapCallToTasks, groupTasksByProject, ExtractedTask } from "@/lib/claude";
 
 export async function POST() {
   const errors: string[] = [];
@@ -73,6 +73,12 @@ export async function POST() {
     }
 
     await log("claude-analysis", "ok", `${extractedTasks.length} tasks from ${emailData.length} threads`);
+
+    // Collapse related tasks within this batch (same ticket, active/passive variations, same project+action)
+    const collapsed = await collapseRelatedTasks([...extractedTasks]);
+    extractedTasks.length = 0;
+    extractedTasks.push(...collapsed);
+    await log("claude-collapse", "ok", `${collapsed.length} tasks after collapsing related`);
 
     // Collate context from Slack messages and Granola meetings into each task
     const meetings = granolaData;
