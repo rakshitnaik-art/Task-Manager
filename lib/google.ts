@@ -98,13 +98,14 @@ export async function getAuthenticatedClient() {
   return oauth2Client;
 }
 
-export async function fetchRecentEmailThreads(days = 60, maxThreads = 60) {
+export async function fetchRecentEmailThreads(since?: Date, maxThreads = 60) {
   const auth = await getAuthenticatedClient();
   if (!auth) return [];
 
   const gmail = google.gmail({ version: 'v1', auth });
-  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
-  const query = `after:${Math.floor(since.getTime() / 1000)} -category:promotions -category:social -from:aira@capillarytech.com -from:dlf.in -subject:FTP -subject:ftp -subject:FTP_IMPORT -subject:"cron job" -subject:"connection failure" -subject:"import alert" -subject:"pre-reminder" -subject:aiRA -subject:aira -subject:"DLF" -subject:"copilot error" -subject:"cluster" -from:bhaskar.priyadarshi@capillarytech.com -from:harsh.deo@capillarytech.com (-category:updates OR from:slack.com)`;
+  // First sync: 60 days back. Subsequent syncs: only since last sync.
+  const sinceDate = since || new Date(Date.now() - 60 * 24 * 60 * 60 * 1000);
+  const query = `after:${Math.floor(sinceDate.getTime() / 1000)} -category:promotions -category:social -from:aira@capillarytech.com -from:dlf.in -subject:FTP -subject:ftp -subject:FTP_IMPORT -subject:"cron job" -subject:"connection failure" -subject:"import alert" -subject:"pre-reminder" -subject:aiRA -subject:aira -subject:"DLF" -subject:"copilot error" -subject:"cluster" -from:bhaskar.priyadarshi@capillarytech.com -from:harsh.deo@capillarytech.com (-category:updates OR from:slack.com)`;
 
   const [profileRes, listRes] = await Promise.all([
     gmail.users.getProfile({ userId: 'me' }),
