@@ -35,7 +35,7 @@ export async function analyzeAndExtractTasks(data: {
     isOrganizer?: boolean; hasActionItems?: boolean;
   }>;
   docs: Array<{ id: string; name: string; type: string; modifiedAt: string; url: string }>;
-  slackMessages: Array<{ channel: string; text: string; ts: string; user: string }>;
+  slackMessages: Array<{ channel: string; text: string; ts: string; user: string; userAlreadyActioned?: boolean }>;
   recentDoneTasks?: string[];
 }): Promise<ExtractedTask[]> {
   const prompt = `You are a productivity assistant for Rakshit Naik, a senior Product Manager at Capillary Tech.
@@ -56,6 +56,9 @@ Before creating a task from an email or Slack message, it MUST contain at least 
 - A deadline mentioned alongside an ask
 - A direct mention by name in a CC'd email: "Rakshit" or "+Rakshit"
 If NONE of these signals are present, confidence must be < 0.65 — drop it.
+
+=== SLACK REACTION RULE ===
+- If a Slack message has userAlreadyActioned=true, the user already reacted with a completion emoji (✅, done, etc.) — SKIP it. Do not create a task.
 
 === CC vs TO RULES ===
 - isCC=false (you are in To): normal bar — extract tasks if there's an action signal
@@ -372,6 +375,58 @@ Return ONLY valid JSON, no markdown.`,
   } catch {
     return [];
   }
+}
+
+export async function generateMorningBriefing(data: {
+  tasks: Array<{ id: string; title: string; priority: string; deadline: Date | null; projectLabel: string | null; status: string }>;
+  events: Array<{ title: string; start: string; end: string; isOrganizer?: boolean }>;
+  date: string;
+}): Promise<string> {
+  const now = new Date();
+  const overdue = data.tasks.filter(t => t.deadline && t.deadline < now);
+  const critical = data.tasks.filter(t => t.priority === "critical" && !(t.deadline && t.deadline < now));
+  const high = data.tasks.filter(t => t.priority === "high" && !(t.deadline && t.deadline < now));
+  const followUps = data.tasks.filter(t => t.status === "open" && t.priority !== "low");
+
+  const prompt = `You are generating a morning briefing for Rakshit Naik, a senior PM at Capillary Tech.
+Today: ${data.date} (IST)
+
+OPEN TASKS:
+${data.tasks.map(t => {
+  const dl = t.deadline ? ` [due ${t.deadline.toISOString().slice(0,10)}]` : '';
+  const od = t.deadline && t.deadline < now ? ' [OVERDUE]' : '';
+  return `- [${t.priority.toUpperCase()}]${od} ${t.title}${dl}${t.projectLabel ? ` (${t.projectLabel})` : ''}`;
+}).join('\n') || 'None'}
+
+TODAY'S MEETINGS:
+${data.events.map(e => `- ${e.title} at ${e.start}`).join('\n') || 'None'}
+
+Generate a concise 4-section morning briefing. Be direct, no fluff. Each section has a max of 3-5 items.
+
+Format exactly as:
+🚨 URGENT (overdue + critical deadline tasks — max 3)
+• [task title] — [one-line why it's urgent]
+
+✅ TOP TO-DOS (highest priority open tasks — max 3)
+• [task title] — [project or context]
+
+🔄 FOLLOW-UPS (tasks that may need chasing — max 3)
+• [task title] — [who/what to follow up on]
+
+📅 TODAY'S MEETINGS (upcoming only — max 5)
+• [time IST] — [meeting title]
+
+End with one sentence: the single most important thing to get done today.
+
+Return plain text only. No markdown headers with #. Use the emoji bullets exactly as shown.`;
+
+  const response = await anthropic.messages.create({
+    model: "claude-sonnet-4-6",
+    max_tokens: 800,
+    messages: [{ role: "user", content: prompt }],
+  });
+
+  return response.content[0].type === "text" ? response.content[0].text : "";
 }
 
 export function reprioritizeTasks(tasks: Array<{ id: string; priority: string; deadline: Date | null; createdAt: Date; title: string; description?: string | null }>): Array<{ id: string; newPriority: string }> {

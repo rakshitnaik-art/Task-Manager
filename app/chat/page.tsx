@@ -8,6 +8,7 @@ interface Message {
 }
 
 const SUGGESTIONS = [
+  "Plan my day",
   "What should I focus on first today?",
   "Which tasks are overdue?",
   "What's critical this week?",

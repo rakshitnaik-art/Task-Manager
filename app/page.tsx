@@ -50,6 +50,8 @@ export default function TodayPage() {
   const [overdueOnly, setOverdueOnly] = useState(false);
   const [search, setSearch] = useState("");
   const [openTaskId, setOpenTaskId] = useState<string | null>(null);
+  const [briefing, setBriefing] = useState<string | null>(null);
+  const [briefingLoading, setBriefingLoading] = useState(false);
   const [chatInput, setChatInput] = useState("");
   const [chatLoading, setChatLoading] = useState(false);
   const [chatReply, setChatReply] = useState<string | null>(null);
@@ -199,10 +201,36 @@ export default function TodayPage() {
               {format(new Date(), "EEEE, MMMM d")} · {filtered.length === 0 ? `No tasks ${todayLabel}` : `${filtered.length} task${filtered.length !== 1 ? "s" : ""} need your attention`}
             </p>
           </div>
-          <button onClick={handleSync} disabled={syncing} className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 rounded-lg text-sm font-medium transition-colors">
-            {syncing ? <><span className="animate-spin">⟳</span> Syncing...</> : <>⟳ Sync now</>}
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={async () => {
+                setBriefingLoading(true);
+                const res = await fetch("/api/briefing");
+                const data = await res.json();
+                setBriefing(data.briefing || "Could not generate briefing");
+                setBriefingLoading(false);
+              }}
+              disabled={briefingLoading}
+              className="flex items-center gap-2 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 border border-zinc-700 rounded-lg text-sm font-medium text-zinc-300 transition-colors"
+            >
+              {briefingLoading ? <span className="animate-spin">⟳</span> : "📋"} Briefing
+            </button>
+            <button onClick={handleSync} disabled={syncing} className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 rounded-lg text-sm font-medium transition-colors">
+              {syncing ? <><span className="animate-spin">⟳</span> Syncing...</> : <>⟳ Sync now</>}
+            </button>
+          </div>
         </div>
+
+        {/* Morning briefing panel */}
+        {briefing && (
+          <div className="mb-5 p-4 rounded-xl bg-zinc-900 border border-zinc-700">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">📋 Morning Briefing</p>
+              <button onClick={() => setBriefing(null)} className="text-zinc-600 hover:text-zinc-400 text-xs">✕</button>
+            </div>
+            <pre className="text-sm text-zinc-300 leading-relaxed whitespace-pre-wrap font-sans">{briefing}</pre>
+          </div>
+        )}
 
         {/* Stats */}
         {stats && (

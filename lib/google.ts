@@ -205,7 +205,13 @@ export async function fetchUpcomingEvents(days = 7) {
   }
 
   return items
-    .filter((e) => !e.recurringEventId || recurringCount[e.recurringEventId] < 4)
+    .filter((e) => {
+      if (e.recurringEventId && recurringCount[e.recurringEventId] >= 4) return false;
+      // Skip events the user has declined
+      const myAttendance = e.attendees?.find(a => a.self === true);
+      if (myAttendance?.responseStatus === "declined") return false;
+      return true;
+    })
     .map((e) => ({
       id: e.id!,
       title: e.summary || "(no title)",

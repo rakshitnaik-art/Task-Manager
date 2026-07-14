@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { prisma } from "@/lib/db";
+import { fetchUpcomingEvents } from "@/lib/google";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -158,7 +159,7 @@ export async function POST(req: NextRequest) {
 
   await ensureProjectContextTable();
 
-  const [tasks, exclusions, contextRows] = await Promise.all([
+  const [tasks, exclusions, contextRows, events] = await Promise.all([
     prisma.task.findMany({
       where: { status: "open" },
       orderBy: [{ priority: "asc" }, { deadline: "asc" }],
@@ -166,7 +167,15 @@ export async function POST(req: NextRequest) {
     }),
     prisma.exclusionRule.findMany({ select: { pattern: true }, take: 20 }),
     prisma.$queryRaw`SELECT projectLabel, url, title, note FROM "ProjectContext" ORDER BY createdAt DESC` as Promise<Array<{ projectLabel: string; url: string | null; title: string | null; note: string | null }>>,
+    fetchUpcomingEvents(2).catch(() => [] as Array<{ title: string; start: string; end: string; isOrganizer?: boolean }>),
   ]);
+
+  const now2 = new Date();
+  const todayEvents = events.filter(e => {
+    const start = new Date(e.start);
+    const endOfToday = new Date(now2.getFullYear(), now2.getMonth(), now2.getDate(), 23, 59, 59);
+    return start <= endOfToday && start >= now2;
+  });
 
   // Group project contexts by label
   const contextByProject: Record<string, Array<{ url?: string; title?: string; note?: string }>> = {};
@@ -196,13 +205,22 @@ export async function POST(req: NextRequest) {
       ).join("\n")
     : "";
 
+  const todayISTStr = today.toLocaleDateString("en-IN", { weekday: "long", year: "numeric", month: "long", day: "numeric", timeZone: "Asia/Kolkata" });
+  const timeISTStr = today.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Kolkata", hour12: true });
+
   const system = `You are a smart productivity assistant for Rakshit Naik, a senior Product Manager at Capillary Tech.
 
-TODAY: ${today.toISOString().slice(0, 10)}
+TODAY: ${todayISTStr} · ${timeISTStr} IST
 
 OPEN TASKS (${tasks.length} total):
 ${taskList || "No open tasks."}
 ${projectContextSection}
+
+TODAY'S MEETINGS (upcoming):
+${todayEvents.length > 0 ? todayEvents.map(e => {
+  const start = new Date(e.start).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Kolkata", hour12: true });
+  return `- ${start} IST — ${e.title}`;
+}).join("\n") : "No meetings today"}
 
 ACTIVE EXCLUSION RULES:
 ${exclusions.map(e => `- ${e.pattern}`).join("\n") || "None"}
@@ -217,6 +235,12 @@ You can:
 
 RULES:
 - When asked what to work on first: overdue > critical > high > earliest deadline
+- When asked to "plan my day", "action plan", or "what should I work on": generate a time-blocked plan in this format:
+  🚨 BLOCK 1 — Do Now (tasks that are overdue or critical)
+  🟡 BLOCK 2 — Before [next meeting time] IST (high priority tasks)
+  📅 BLOCK 3 — Rest of Day (medium priority, can be done between meetings)
+  For each block: list 2-3 tasks with a one-line reason and rough time estimate (~15 min, ~1 hr, etc.)
+  Factor in meeting times — don't schedule heavy work right before meetings.
 - When user says "never show me X" or "exclude X from future syncs" → add_exclusion_rule
 - When user shares URLs for a project ("here are the Beacon docs") → save_project_context
 - When answering about a project that has saved docs → mention them with their URLs
