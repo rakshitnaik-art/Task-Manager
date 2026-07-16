@@ -143,12 +143,14 @@ export default function OnboardingPage() {
         {step === 1 && (
           <div className="text-center">
             <img
-              src="/taskora-logo.png"
+              src="/icon-robot-1024.png"
               alt="Taskora"
-              className="mx-auto mb-8 w-80 object-contain rounded-2xl"
+              className="mx-auto mb-5 w-28 h-28 object-contain drop-shadow-lg"
               draggable={false}
             />
-            <p className="text-zinc-500 text-sm mb-10 max-w-md mx-auto leading-relaxed">
+            <h1 className="text-4xl font-bold text-white mb-1 tracking-tight">Taskora</h1>
+            <p className="text-indigo-400 text-base mb-2 font-medium">Your AI Productivity Assistant</p>
+            <p className="text-zinc-500 text-sm mb-10 max-w-sm mx-auto leading-relaxed">
               Meetings. Email. Tasks. Calendar. One AI that remembers everything and helps you stay ahead.
             </p>
             <button
