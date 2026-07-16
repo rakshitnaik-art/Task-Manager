@@ -6,8 +6,8 @@ import Sidebar from "@/components/Sidebar";
 const geist = Geist({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Focus Hub",
-  description: "PM Productivity Dashboard",
+  title: "Taskora",
+  description: "Your Second Brain for Work",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

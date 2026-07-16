@@ -20,12 +20,17 @@ export async function register() {
       const data = await res.json();
       console.log(`[briefing] generated at ${new Date().toISOString()}`);
 
-      // Send to Slack DM if token is available
+      // Send to Slack DM via the API route (avoids importing Node.js modules here)
       if (data.briefing) {
-        const { sendSlackDM } = await import("./lib/slack");
-        const sent = await sendSlackDM(`*📋 Morning Briefing — ${new Date().toLocaleDateString("en-IN", { weekday: "long", month: "long", day: "numeric", timeZone: "Asia/Kolkata" })}*\n\n${data.briefing}`);
-        if (sent) console.log("[briefing] sent via Slack DM");
-        else console.log("[briefing] Slack not connected, briefing logged only:\n", data.briefing);
+        try {
+          await fetch(`${appUrl}/api/briefing/send-slack`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ message: `*📋 Morning Briefing — ${new Date().toLocaleDateString("en-IN", { weekday: "long", month: "long", day: "numeric", timeZone: "Asia/Kolkata" })}*\n\n${data.briefing}` }),
+          });
+        } catch {
+          console.log("[briefing] Slack not connected, briefing logged only:\n", data.briefing);
+        }
       }
     } catch (e) {
       console.error("[briefing] failed:", e);

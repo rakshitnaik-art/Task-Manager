@@ -2,8 +2,12 @@ import { NextRequest } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { prisma } from "@/lib/db";
 import { fetchUpcomingEvents } from "@/lib/google";
+import { getSettings } from "@/lib/settings";
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+function getAnthropic() {
+  const key = process.env.ANTHROPIC_API_KEY || getSettings().anthropicKey;
+  return new Anthropic({ apiKey: key });
+}
 
 // Auto-create table on first use — no manual migration needed
 async function ensureProjectContextTable() {
@@ -208,7 +212,12 @@ export async function POST(req: NextRequest) {
   const todayISTStr = today.toLocaleDateString("en-IN", { weekday: "long", year: "numeric", month: "long", day: "numeric", timeZone: "Asia/Kolkata" });
   const timeISTStr = today.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Kolkata", hour12: true });
 
-  const system = `You are a smart productivity assistant for Rakshit Naik, a senior Product Manager at Capillary Tech.
+  const settings = getSettings();
+  const userDescriptor = settings.userName
+    ? `${settings.userName}, a Product Manager`
+    : `a Product Manager`;
+
+  const system = `You are a smart productivity assistant for ${userDescriptor}.
 
 TODAY: ${todayISTStr} · ${timeISTStr} IST
 
@@ -251,6 +260,7 @@ RULES:
     content: m.content,
   }));
 
+  const anthropic = getAnthropic();
   let response = await anthropic.messages.create({
     model: "claude-sonnet-4-6",
     max_tokens: 1024,

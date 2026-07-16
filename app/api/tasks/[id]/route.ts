@@ -16,7 +16,6 @@ function domainLabel(url: string): string {
     if (host.includes("drive.google.com")) return "Google Drive";
     if (host.includes("slack.com")) return "Slack";
     if (host.includes("notion.so")) return "Notion";
-    if (host.includes("capillarytech.com")) return "Capillary";
     if (host.includes("jira") || host.includes("atlassian")) return "Jira";
     if (host.includes("github.com")) return "GitHub";
     if (host.includes("figma.com")) return "Figma";

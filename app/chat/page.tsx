@@ -58,7 +58,7 @@ export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>([
     {
       role: "assistant",
-      content: "Hey Rakshit! I have your task list loaded. Ask me anything — what to focus on, what's overdue, or tell me to add a task or exclude noisy categories.",
+      content: "Hey there! I have your task list loaded. Ask me anything — what to focus on, what's overdue, or tell me to add a task or exclude noisy categories.",
     },
   ]);
   const [input, setInput] = useState("");

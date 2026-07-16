@@ -1,6 +1,21 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { getSettings } from "./settings";
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+function makeAnthropic(): Anthropic {
+  const key = process.env.ANTHROPIC_API_KEY || getSettings().anthropicKey;
+  return new Anthropic({ apiKey: key });
+}
+
+// Lazy proxy so any `anthropic.*` usage creates a fresh client with the
+// currently-configured key (allows settings updates without restart).
+const anthropic = new Proxy({} as Anthropic, {
+  get(_target, prop) {
+    const client = makeAnthropic();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const value = (client as any)[prop];
+    return typeof value === "function" ? value.bind(client) : value;
+  },
+});
 
 export interface ExtractedTask {
   title: string;
@@ -38,7 +53,16 @@ export async function analyzeAndExtractTasks(data: {
   slackMessages: Array<{ channel: string; text: string; ts: string; user: string; userAlreadyActioned?: boolean }>;
   recentDoneTasks?: string[];
 }): Promise<ExtractedTask[]> {
-  const prompt = `You are a productivity assistant for Rakshit Naik, a senior Product Manager at Capillary Tech.
+  const userSettings = getSettings();
+  const userDescriptor = userSettings.userName
+    ? `${userSettings.userName}, a Product Manager`
+    : `a Product Manager`;
+  const firstName = (userSettings.userName || "").split(/\s+/)[0] || "";
+  const mentionExamples = firstName
+    ? `"${firstName}" or "+${firstName}"`
+    : `by first name or "+<first-name>"`;
+
+  const prompt = `You are a productivity assistant for ${userDescriptor}.
 
 Extract actionable tasks. For EVERY task you extract, assign a confidence score (0.0–1.0) representing how certain you are this requires PM action. Only include tasks with confidence >= 0.65.
 
@@ -54,7 +78,7 @@ Before creating a task from an email or Slack message, it MUST contain at least 
 - A direct question to the PM ("can you", "could you", "would you", "do you think", "what do you")
 - An explicit request verb ("please review", "please approve", "please respond", "need you to", "requesting your")
 - A deadline mentioned alongside an ask
-- A direct mention by name in a CC'd email: "Rakshit" or "+Rakshit"
+- A direct mention by name in a CC'd email: ${mentionExamples}
 If NONE of these signals are present, confidence must be < 0.65 — drop it.
 
 === SLACK REACTION RULE ===
@@ -388,7 +412,12 @@ export async function generateMorningBriefing(data: {
   const high = data.tasks.filter(t => t.priority === "high" && !(t.deadline && t.deadline < now));
   const followUps = data.tasks.filter(t => t.status === "open" && t.priority !== "low");
 
-  const prompt = `You are generating a morning briefing for Rakshit Naik, a senior PM at Capillary Tech.
+  const briefingSettings = getSettings();
+  const briefingUserLine = briefingSettings.userName
+    ? `${briefingSettings.userName}, a Product Manager`
+    : `a Product Manager`;
+
+  const prompt = `You are generating a morning briefing for ${briefingUserLine}.
 Today: ${data.date} (IST)
 
 OPEN TASKS:

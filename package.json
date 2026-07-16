@@ -1,16 +1,59 @@
 {
-  "name": "productivity-hub",
+  "name": "taskora",
   "version": "0.1.0",
   "private": true,
+  "main": "electron/main.js",
   "engines": {
     "node": ">=20"
   },
   "scripts": {
     "dev": "next dev -p 3001",
     "build": "next build",
-    "start": "next start",
+    "start": "next start -p 3001",
     "postinstall": "prisma generate",
-    "lint": "eslint"
+    "lint": "eslint",
+    "electron:dev": "concurrently -n next,electron -c cyan,yellow \"npm run dev\" \"wait-on http://localhost:3001 && electron .\"",
+    "electron:build": "next build && electron-builder --mac",
+    "electron:dist": "next build && electron-builder --mac --publish never"
+  },
+  "build": {
+    "appId": "com.taskora.app",
+    "productName": "Taskora",
+    "copyright": "Taskora",
+    "mac": {
+      "icon": "public/icon.icns",
+      "category": "public.app-category.productivity",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64"
+          ]
+        }
+      ]
+    },
+    "directories": {
+      "output": "dist-electron"
+    },
+    "files": [
+      "electron/**/*",
+      ".next/**/*",
+      "node_modules/**/*",
+      "package.json",
+      "public/**/*",
+      "prisma/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": ".env.local",
+        "to": ".env.local"
+      }
+    ],
+    "publish": {
+      "provider": "github",
+      "owner": "taskora-app",
+      "repo": "taskora"
+    }
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.110.0",
@@ -21,6 +64,7 @@
     "@slack/web-api": "^7.19.0",
     "clsx": "^2.1.1",
     "date-fns": "^4.4.0",
+    "electron-updater": "^6.8.9",
     "googleapis": "^173.0.0",
     "lucide-react": "^1.24.0",
     "next": "16.2.10",
@@ -35,9 +79,13 @@
     "@types/node": "^20.19.43",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "concurrently": "^10.0.3",
+    "electron": "^43.1.1",
+    "electron-builder": "^26.15.3",
     "eslint": "^9",
     "eslint-config-next": "16.2.10",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "wait-on": "^9.0.10"
   }
 }

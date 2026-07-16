@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0a0a1a"/>
+      <stop offset="100%" stop-color="#1a0a2e"/>
+    </linearGradient>
+    <linearGradient id="tGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#6366f1"/>
+      <stop offset="100%" stop-color="#8b5cf6"/>
+    </linearGradient>
+    <radialGradient id="nodeGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#a78bfa" stop-opacity="1"/>
+      <stop offset="60%" stop-color="#8b5cf6" stop-opacity="0.6"/>
+      <stop offset="100%" stop-color="#6366f1" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="12" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="softGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="6" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Rounded rect background -->
+  <rect x="0" y="0" width="1024" height="1024" rx="224" ry="224" fill="url(#bgGradient)"/>
+
+  <!-- Subtle inner highlight -->
+  <rect x="0" y="0" width="1024" height="1024" rx="224" ry="224" fill="none" stroke="#2a1a3e" stroke-width="2" opacity="0.5"/>
+
+  <!-- Neural node connection lines forming a "T" -->
+  <g stroke="url(#tGradient)" stroke-width="10" stroke-linecap="round" opacity="0.85" filter="url(#softGlow)">
+    <!-- Top horizontal bar of T -->
+    <line x1="240" y1="288" x2="512" y2="288"/>
+    <line x1="512" y1="288" x2="784" y2="288"/>
+    <!-- Vertical stem of T -->
+    <line x1="512" y1="288" x2="512" y2="512"/>
+    <line x1="512" y1="512" x2="512" y2="736"/>
+    <!-- Diagonal accents (neural connections) -->
+    <line x1="240" y1="288" x2="384" y2="416" stroke-width="6" opacity="0.5"/>
+    <line x1="784" y1="288" x2="640" y2="416" stroke-width="6" opacity="0.5"/>
+    <line x1="384" y1="416" x2="512" y2="512" stroke-width="6" opacity="0.5"/>
+    <line x1="640" y1="416" x2="512" y2="512" stroke-width="6" opacity="0.5"/>
+    <line x1="384" y1="416" x2="640" y2="416" stroke-width="6" opacity="0.4"/>
+    <line x1="384" y1="640" x2="512" y2="640" stroke-width="6" opacity="0.5"/>
+    <line x1="640" y1="640" x2="512" y2="640" stroke-width="6" opacity="0.5"/>
+    <line x1="512" y1="640" x2="512" y2="736" stroke-width="6" opacity="0.5"/>
+  </g>
+
+  <!-- Glowing halos behind main nodes -->
+  <g filter="url(#glow)">
+    <circle cx="240" cy="288" r="40" fill="url(#nodeGlow)" opacity="0.6"/>
+    <circle cx="512" cy="288" r="48" fill="url(#nodeGlow)" opacity="0.7"/>
+    <circle cx="784" cy="288" r="40" fill="url(#nodeGlow)" opacity="0.6"/>
+    <circle cx="512" cy="512" r="44" fill="url(#nodeGlow)" opacity="0.65"/>
+    <circle cx="512" cy="736" r="40" fill="url(#nodeGlow)" opacity="0.6"/>
+  </g>
+
+  <!-- Main neural nodes at T corners and joints -->
+  <g fill="url(#tGradient)" filter="url(#softGlow)">
+    <!-- Top-left corner -->
+    <circle cx="240" cy="288" r="22"/>
+    <!-- Top-center -->
+    <circle cx="512" cy="288" r="26"/>
+    <!-- Top-right corner -->
+    <circle cx="784" cy="288" r="22"/>
+    <!-- Middle joint -->
+    <circle cx="512" cy="512" r="24"/>
+    <!-- Bottom -->
+    <circle cx="512" cy="736" r="22"/>
+  </g>
+
+  <!-- Bright inner cores for main nodes -->
+  <g fill="#e0e7ff">
+    <circle cx="240" cy="288" r="8"/>
+    <circle cx="512" cy="288" r="10"/>
+    <circle cx="784" cy="288" r="8"/>
+    <circle cx="512" cy="512" r="9"/>
+    <circle cx="512" cy="736" r="8"/>
+  </g>
+
+  <!-- Smaller accent nodes at connection midpoints -->
+  <g fill="#8b5cf6" opacity="0.9">
+    <circle cx="384" cy="416" r="10"/>
+    <circle cx="640" cy="416" r="10"/>
+    <circle cx="384" cy="640" r="8"/>
+    <circle cx="640" cy="640" r="8"/>
+  </g>
+
+  <!-- Tiny bright cores on accent nodes -->
+  <g fill="#c4b5fd">
+    <circle cx="384" cy="416" r="3"/>
+    <circle cx="640" cy="416" r="3"/>
+    <circle cx="384" cy="640" r="2.5"/>
+    <circle cx="640" cy="640" r="2.5"/>
+  </g>
+</svg>

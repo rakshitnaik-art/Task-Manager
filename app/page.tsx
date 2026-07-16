@@ -56,6 +56,7 @@ export default function TodayPage() {
   const [chatLoading, setChatLoading] = useState(false);
   const [chatReply, setChatReply] = useState<string | null>(null);
   const [chatError, setChatError] = useState<string | null>(null);
+  const [userName, setUserName] = useState<string>("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const fetchStats = useCallback(async () => {
@@ -100,6 +101,12 @@ export default function TodayPage() {
     fetchStats();
     reprioritize();
     groupTasks().then(() => fetchTasks(view));
+    fetch("/api/settings")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (data?.userName) setUserName(data.userName);
+      })
+      .catch(() => {});
   }, [view, fetchTasks, fetchStatus, fetchStats, reprioritize, groupTasks]);
 
   const handleSync = async () => {
@@ -196,7 +203,7 @@ export default function TodayPage() {
         {/* Header */}
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h1 className="text-2xl font-bold text-white">Good morning, Rakshit</h1>
+            <h1 className="text-2xl font-bold text-white">{userName ? `Good morning, ${userName}` : "Good morning"}</h1>
             <p className="text-zinc-500 text-sm mt-1">
               {format(new Date(), "EEEE, MMMM d")} · {filtered.length === 0 ? `No tasks ${todayLabel}` : `${filtered.length} task${filtered.length !== 1 ? "s" : ""} need your attention`}
             </p>

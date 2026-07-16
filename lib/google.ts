@@ -1,5 +1,22 @@
 import { google } from "googleapis";
 import { prisma } from "./db";
+import { getSettings } from "./settings";
+
+function getGoogleClientId(): string | undefined {
+  return process.env.GOOGLE_CLIENT_ID || getSettings().googleClientId || undefined;
+}
+
+function getGoogleClientSecret(): string | undefined {
+  return process.env.GOOGLE_CLIENT_SECRET || getSettings().googleClientSecret || undefined;
+}
+
+function getGoogleRedirectUri(): string {
+  return (
+    process.env.GOOGLE_REDIRECT_URI ||
+    getSettings().googleRedirectUri ||
+    "http://localhost:3001/api/auth/google/callback"
+  );
+}
 
 function decodeBase64Url(data: string): string {
   try {
@@ -39,9 +56,9 @@ export const SCOPES = [
 
 export function getOAuthClient() {
   return new google.auth.OAuth2(
-    process.env.GOOGLE_CLIENT_ID,
-    process.env.GOOGLE_CLIENT_SECRET,
-    process.env.GOOGLE_REDIRECT_URI || "http://localhost:3001/api/auth/google/callback"
+    getGoogleClientId(),
+    getGoogleClientSecret(),
+    getGoogleRedirectUri()
   );
 }
 
@@ -105,7 +122,7 @@ export async function fetchRecentEmailThreads(since?: Date, maxThreads = 60) {
   const gmail = google.gmail({ version: 'v1', auth });
   // First sync: 60 days back. Subsequent syncs: only since last sync.
   const sinceDate = since || new Date(Date.now() - 60 * 24 * 60 * 60 * 1000);
-  const query = `after:${Math.floor(sinceDate.getTime() / 1000)} -category:promotions -category:social -from:aira@capillarytech.com -from:dlf.in -subject:FTP -subject:ftp -subject:FTP_IMPORT -subject:"cron job" -subject:"connection failure" -subject:"import alert" -subject:"pre-reminder" -subject:aiRA -subject:aira -subject:"DLF" -subject:"copilot error" -subject:"cluster" -from:bhaskar.priyadarshi@capillarytech.com -from:harsh.deo@capillarytech.com (-category:updates OR from:slack.com)`;
+  const query = `after:${Math.floor(sinceDate.getTime() / 1000)} -category:promotions -category:social -subject:FTP -subject:ftp -subject:FTP_IMPORT -subject:"cron job" -subject:"connection failure" -subject:"import alert" -subject:"pre-reminder" -subject:"copilot error" -subject:"cluster" (-category:updates OR from:slack.com)`;
 
   const [profileRes, listRes] = await Promise.all([
     gmail.users.getProfile({ userId: 'me' }),
@@ -154,7 +171,12 @@ export async function fetchRecentEmailThreads(since?: Date, maxThreads = 60) {
         if (combinedBody.length > 2500) break;
       }
       const bodyLower = combinedBody.toLowerCase();
-      const mentionedInBody = bodyLower.includes('rakshit') || bodyLower.includes('+rakshit');
+      // Detect if the user is mentioned by their first name (from settings) or by email local-part
+      const settings = getSettings();
+      const nameToken = (settings.userName || '').split(/\s+/)[0]?.toLowerCase() || '';
+      const emailLocalPart = (settings.userEmail || myEmail).split('@')[0]?.toLowerCase() || '';
+      const mentionedInBody = (!!nameToken && bodyLower.includes(nameToken)) ||
+        (!!emailLocalPart && bodyLower.includes(`+${emailLocalPart}`));
 
       results.push({
         id: thread.id!,
@@ -224,62 +246,9 @@ export async function fetchUpcomingEvents(days = 7) {
     }));
 }
 
-const PINNED_SHEETS = [
-  {
-    id: "1x2SBFkEb5TsCa334DLDMKm-kn0V9S5ZAmwzU2EqMv8A",
-    gid: 682521224,
-    label: "My Personal Task Sheet",
-  },
-  {
-    id: "1RRlFMLk3jDgMM9VCMortqE_OZ0BqO2nDv4XTyLKHomI",
-    gid: 918907142,
-    label: "Team Product Roadmap",
-  },
-  {
-    id: "1VaxsPzPHeJjO2pJrUT2YUlEpsDqFGe168FKrzjkEdjA",
-    gid: 925585987,
-    label: "PM Task Tracker (Bhaskar)",
-  },
-];
-
-export async function fetchPinnedSheets() {
-  const auth = await getAuthenticatedClient();
-  if (!auth) return [];
-
-  const sheetsClient = google.sheets({ version: "v4", auth });
-  const results = [];
-
-  for (const pinned of PINNED_SHEETS) {
-    try {
-      // Resolve gid → sheet tab name
-      const meta = await sheetsClient.spreadsheets.get({ spreadsheetId: pinned.id });
-      const tab = meta.data.sheets?.find((s) => s.properties?.sheetId === pinned.gid);
-      const tabName = tab?.properties?.title;
-      if (!tabName) continue;
-
-      const range = `${tabName}!A1:Z300`;
-      const dataRes = await sheetsClient.spreadsheets.values.get({
-        spreadsheetId: pinned.id,
-        range,
-      });
-
-      const rows = dataRes.data.values || [];
-      const snippet = rows.map((r) => r.join("\t")).join("\n").slice(0, 3000);
-
-      results.push({
-        id: pinned.id,
-        name: pinned.label,
-        type: "sheet",
-        modifiedAt: new Date().toISOString(),
-        url: `https://docs.google.com/spreadsheets/d/${pinned.id}/edit#gid=${pinned.gid}`,
-        snippet,
-      });
-    } catch {
-      // skip if sheet can't be accessed
-    }
-  }
-
-  return results;
+export async function fetchPinnedSheets(): Promise<Array<{ id: string; name: string; type: string; modifiedAt: string; url: string; snippet: string }>> {
+  // Pinned sheets are no longer hardcoded. Users will configure their sheets via settings in the future.
+  return [];
 }
 
 export async function fetchRecentDocs() {

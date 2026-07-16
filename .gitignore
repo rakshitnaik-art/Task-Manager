@@ -53,3 +53,9 @@ dev.db-shm
 
 # prisma test files
 prisma/test.txt
+
+# electron build output
+dist-electron/
+
+# scratch files
+app/test_write.txt
