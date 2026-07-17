@@ -181,22 +181,6 @@ No markdown.`;
   }
 }
 
-export async function generateDailySummary(tasks: ExtractedTask[]): Promise<string> {
-  const today = tasks.filter((t) => t.priority === "critical" || t.priority === "high");
-
-  const response = await anthropic.messages.create({
-    model: "claude-sonnet-4-6",
-    max_tokens: 512,
-    messages: [
-      {
-        role: "user",
-        content: `Write a brief daily briefing (3-4 sentences) for a Product Manager based on these priority tasks: ${JSON.stringify(today)}. Be direct and action-oriented.`,
-      },
-    ],
-  });
-
-  return response.content[0].type === "text" ? response.content[0].text : "";
-}
 
 export async function learnExclusionRule(title: string, rawContext?: string | null): Promise<{ pattern: string; intent: string; keywords: string[] }> {
   const response = await anthropic.messages.create({

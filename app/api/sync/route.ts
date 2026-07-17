@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db";
-import { fetchRecentEmailThreads, fetchUpcomingEvents, fetchRecentDocs, fetchPinnedSheets } from "@/lib/google";
+import { fetchRecentEmailThreads, fetchUpcomingEvents, fetchRecentDocs } from "@/lib/google";
 import { fetchRecentSlackMessages } from "@/lib/slack";
 import { analyzeAndExtractTasks, collateTaskContext, checkExclusionRules, deduplicateTasks, collapseRelatedTasks, groupTasksByProject, ExtractedTask } from "@/lib/claude";
 
@@ -21,25 +21,22 @@ export async function POST() {
     : lastEmailSync?.syncedAt;
 
   // Fetch all data sources in parallel
-  const [emails, events, docs, pinnedSheets, slackMessages] = await Promise.allSettled([
+  const [emails, events, docs, slackMessages] = await Promise.allSettled([
     fetchRecentEmailThreads(emailSince, 60),
     fetchUpcomingEvents(),
     fetchRecentDocs(),
-    fetchPinnedSheets(),
     fetchRecentSlackMessages(),
   ]);
 
   const emailData = emails.status === "fulfilled" ? emails.value : (errors.push("gmail"), []);
   const eventData = events.status === "fulfilled" ? events.value : (errors.push("calendar"), []);
   const docData = docs.status === "fulfilled" ? docs.value : (errors.push("drive"), []);
-  const pinnedSheetData = pinnedSheets.status === "fulfilled" ? pinnedSheets.value : (errors.push("pinned-sheets"), []);
   const slackData = slackMessages.status === "fulfilled" ? slackMessages.value : (errors.push("slack"), []);
 
   await Promise.all([
     log("gmail", emails.status === "fulfilled" ? "ok" : "error", `${emailData.length} threads`),
     log("calendar", events.status === "fulfilled" ? "ok" : "error"),
     log("drive", docs.status === "fulfilled" ? "ok" : "error"),
-    log("sheets", pinnedSheets.status === "fulfilled" ? "ok" : "error", `${pinnedSheetData.length} sheets`),
     log("slack", slackMessages.status === "fulfilled" ? "ok" : "error"),
   ]);
 
@@ -69,7 +66,7 @@ export async function POST() {
     const firstBatch = await analyzeAndExtractTasks({
       emails: firstChunk,
       events: eventData,
-      docs: [...docData, ...pinnedSheetData],
+      docs: docData,
       slackMessages: slackData,
       recentDoneTasks,
     });

@@ -246,10 +246,6 @@ export async function fetchUpcomingEvents(days = 7) {
     }));
 }
 
-export async function fetchPinnedSheets(): Promise<Array<{ id: string; name: string; type: string; modifiedAt: string; url: string; snippet: string }>> {
-  // Pinned sheets are no longer hardcoded. Users will configure their sheets via settings in the future.
-  return [];
-}
 
 export async function fetchRecentDocs() {
   const auth = await getAuthenticatedClient();
