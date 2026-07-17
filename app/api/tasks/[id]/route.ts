@@ -50,26 +50,5 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     }
   }
 
-  // Related Granola meeting notes
-  const callMappings = await prisma.callMapping.findMany({
-    where: { taskId: id },
-    include: { call: true },
-    orderBy: { createdAt: "desc" },
-  });
-
-  return Response.json({
-    task,
-    extractedLinks,
-    projectDocs,
-    relatedCalls: callMappings.map(m => ({
-      id: m.call.id,
-      title: m.call.title,
-      startedAt: m.call.startedAt,
-      summary: m.call.summary,
-      transcript: m.call.transcript?.slice(0, 1200),
-      attendees: m.call.attendees ? JSON.parse(m.call.attendees) : [],
-      notes: m.notes,
-      confidence: m.confidence,
-    })),
-  });
+  return Response.json({ task, extractedLinks, projectDocs });
 }

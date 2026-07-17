@@ -6,11 +6,9 @@ import { useSearchParams } from "next/navigation";
 interface Status {
   google: boolean;
   slack: boolean;
-  granola: boolean;
   anthropic: boolean;
   lastSync: string | null;
   taskCount: number;
-  callCount: number;
 }
 
 function SettingsContent() {
@@ -209,12 +207,6 @@ function SettingsContent() {
             )}
           </div>
         </div>
-        <ConnectRow
-          label="Granola"
-          icon="🟢"
-          connected={status?.granola ?? false}
-          description="Reads meeting notes from your local Granola app"
-        />
       </div>
 
       {status && (
@@ -222,10 +214,6 @@ function SettingsContent() {
           <div className="p-4 rounded-xl border border-zinc-800 bg-zinc-900 text-center">
             <p className="text-2xl font-bold text-white">{status.taskCount}</p>
             <p className="text-xs text-zinc-500 mt-1">Open Tasks</p>
-          </div>
-          <div className="p-4 rounded-xl border border-zinc-800 bg-zinc-900 text-center">
-            <p className="text-2xl font-bold text-white">{status.callCount}</p>
-            <p className="text-xs text-zinc-500 mt-1">Calls Tracked</p>
           </div>
           <div className="p-4 rounded-xl border border-zinc-800 bg-zinc-900 text-center">
             <p className="text-2xl font-bold text-white">{status.lastSync ? "✓" : "—"}</p>

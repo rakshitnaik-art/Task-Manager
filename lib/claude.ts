@@ -29,14 +29,6 @@ export interface ExtractedTask {
   confidence?: number;
 }
 
-export interface CallMapping {
-  taskTitle?: string;
-  taskId?: string;
-  confidence: number;
-  notes: string;
-  needsConfirmation: boolean;
-  question?: string;
-}
 
 export async function analyzeAndExtractTasks(data: {
   emails: Array<{
@@ -136,43 +128,6 @@ Return a JSON array. Max 20 tasks. Include ONLY tasks with confidence >= 0.65. R
   }
 }
 
-export async function mapCallToTasks(
-  call: { title: string; summary?: string; transcript?: string; attendees?: string[] },
-  existingTasks: Array<{ id: string; title: string; description?: string | null }>
-): Promise<CallMapping> {
-  const prompt = `You are a Product Manager's assistant. Map this meeting to one of the existing tasks, or say it doesn't match.
-
-MEETING:
-Title: ${call.title}
-Summary: ${call.summary || "No summary"}
-Attendees: ${(call.attendees || []).join(", ") || "Unknown"}
-Transcript excerpt: ${call.transcript?.slice(0, 1000) || "No transcript"}
-
-EXISTING TASKS:
-${existingTasks.map((t, i) => `${i + 1}. [${t.id}] ${t.title}: ${t.description || ""}`).join("\n")}
-
-If you can confidently match (confidence > 0.7), return the task ID and your notes.
-If unsure (confidence 0.4-0.7), set needsConfirmation to true and ask a specific question.
-If no match (confidence < 0.4), return null taskId.
-
-Return JSON: { taskId: string|null, confidence: number, notes: string, needsConfirmation: boolean, question?: string }
-Return ONLY valid JSON, no markdown.`;
-
-  const response = await anthropic.messages.create({
-    model: "claude-sonnet-4-6",
-    max_tokens: 512,
-    messages: [{ role: "user", content: prompt }],
-  });
-
-  const text = response.content[0].type === "text" ? response.content[0].text : "";
-
-  try {
-    const cleaned = text.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
-    return JSON.parse(cleaned) as CallMapping;
-  } catch {
-    return { taskId: undefined, confidence: 0, notes: "Could not parse response", needsConfirmation: true };
-  }
-}
 
 export async function collateTaskContext(
   tasks: ExtractedTask[],

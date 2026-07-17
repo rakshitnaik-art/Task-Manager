@@ -23,8 +23,6 @@ model Task {
   blockedReason String?
   createdAt     DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
-
-  callMappings CallMapping[]
 }
 
 model ExclusionRule {
@@ -36,33 +34,6 @@ model ExclusionRule {
   createdAt    DateTime @default(now())
 }
 
-model GranolaCall {
-  id         String   @id @default(cuid())
-  granolaId  String   @unique
-  title      String
-  startedAt  DateTime
-  duration   Int?
-  transcript String?
-  summary    String?
-  attendees  String?
-  synced     Boolean  @default(false)
-  createdAt  DateTime @default(now())
-
-  callMappings CallMapping[]
-}
-
-model CallMapping {
-  id         String      @id @default(cuid())
-  callId     String
-  taskId     String?
-  notes      String?
-  confidence Float?
-  confirmed  Boolean     @default(false)
-  createdAt  DateTime    @default(now())
-
-  call GranolaCall @relation(fields: [callId], references: [id])
-  task Task?       @relation(fields: [taskId], references: [id])
-}
 
 model OAuthToken {
   id           String   @id @default(cuid())

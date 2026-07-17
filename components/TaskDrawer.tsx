@@ -20,17 +20,10 @@ interface Task {
 
 interface Link { url: string; label: string; }
 interface ProjectDoc { url: string | null; title: string | null; note: string | null; }
-interface RelatedCall {
-  id: string; title: string; startedAt: string;
-  summary?: string | null; transcript?: string | null;
-  attendees: string[]; notes?: string | null; confidence?: number | null;
-}
-
 interface DetailData {
   task: Task;
   extractedLinks: Link[];
   projectDocs: ProjectDoc[];
-  relatedCalls: RelatedCall[];
 }
 
 const priorityColors: Record<string, string> = {
@@ -193,28 +186,6 @@ export default function TaskDrawer({ taskId, onClose }: { taskId: string; onClos
                 <p className="text-xs text-zinc-400 leading-relaxed">{doc.note}</p>
               </section>
             ))}
-
-            {/* Related meeting notes */}
-            {(data?.relatedCalls || []).length > 0 && (
-              <section>
-                <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2">
-                  Meeting Notes <span className="text-zinc-600 font-normal normal-case tracking-normal">({data!.relatedCalls.length})</span>
-                </h3>
-                <div className="space-y-3">
-                  {data!.relatedCalls.map(call => (
-                    <div key={call.id} className="p-3 bg-zinc-900 border border-zinc-800 rounded-lg">
-                      <p className="text-xs font-medium text-white mb-0.5">{call.title}</p>
-                      <p className="text-xs text-zinc-600 mb-2">{format(new Date(call.startedAt), "MMM d yyyy · h:mm a")}</p>
-                      {call.attendees?.length > 0 && (
-                        <p className="text-xs text-zinc-500 mb-2">With: {call.attendees.join(", ")}</p>
-                      )}
-                      {call.summary && <p className="text-xs text-zinc-400 leading-relaxed">{call.summary}</p>}
-                      {call.notes && <p className="text-xs text-zinc-500 mt-1 italic">{call.notes}</p>}
-                    </div>
-                  ))}
-                </div>
-              </section>
-            )}
 
             {/* Context summary */}
             {task.rawContext && (

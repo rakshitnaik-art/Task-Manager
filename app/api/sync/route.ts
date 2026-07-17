@@ -1,8 +1,7 @@
 import { prisma } from "@/lib/db";
 import { fetchRecentEmailThreads, fetchUpcomingEvents, fetchRecentDocs, fetchPinnedSheets } from "@/lib/google";
 import { fetchRecentSlackMessages } from "@/lib/slack";
-import { fetchGranolaMeetings } from "@/lib/granola";
-import { analyzeAndExtractTasks, collateTaskContext, checkExclusionRules, deduplicateTasks, collapseRelatedTasks, mapCallToTasks, groupTasksByProject, ExtractedTask } from "@/lib/claude";
+import { analyzeAndExtractTasks, collateTaskContext, checkExclusionRules, deduplicateTasks, collapseRelatedTasks, groupTasksByProject, ExtractedTask } from "@/lib/claude";
 
 export async function POST() {
   const errors: string[] = [];
@@ -22,13 +21,12 @@ export async function POST() {
     : lastEmailSync?.syncedAt;
 
   // Fetch all data sources in parallel
-  const [emails, events, docs, pinnedSheets, slackMessages, granolaCalls] = await Promise.allSettled([
+  const [emails, events, docs, pinnedSheets, slackMessages] = await Promise.allSettled([
     fetchRecentEmailThreads(emailSince, 60),
     fetchUpcomingEvents(),
     fetchRecentDocs(),
     fetchPinnedSheets(),
     fetchRecentSlackMessages(),
-    fetchGranolaMeetings(),
   ]);
 
   const emailData = emails.status === "fulfilled" ? emails.value : (errors.push("gmail"), []);
@@ -36,7 +34,6 @@ export async function POST() {
   const docData = docs.status === "fulfilled" ? docs.value : (errors.push("drive"), []);
   const pinnedSheetData = pinnedSheets.status === "fulfilled" ? pinnedSheets.value : (errors.push("pinned-sheets"), []);
   const slackData = slackMessages.status === "fulfilled" ? slackMessages.value : (errors.push("slack"), []);
-  const granolaData = granolaCalls.status === "fulfilled" ? granolaCalls.value : (errors.push("granola"), []);
 
   await Promise.all([
     log("gmail", emails.status === "fulfilled" ? "ok" : "error", `${emailData.length} threads`),
@@ -44,7 +41,6 @@ export async function POST() {
     log("drive", docs.status === "fulfilled" ? "ok" : "error"),
     log("sheets", pinnedSheets.status === "fulfilled" ? "ok" : "error", `${pinnedSheetData.length} sheets`),
     log("slack", slackMessages.status === "fulfilled" ? "ok" : "error"),
-    log("granola", granolaCalls.status === "fulfilled" ? "ok" : "error"),
   ]);
 
   // Analyse emails in chunks of 40 to stay within Claude's context window
@@ -104,9 +100,8 @@ export async function POST() {
     extractedTasks.push(...collapsed);
     await log("claude-collapse", "ok", `${collapsed.length} tasks after collapsing related`);
 
-    // Collate context from Slack messages and Granola meetings into each task
-    const meetings = granolaData;
-    const collated = await collateTaskContext([...extractedTasks], slackData, meetings);
+    // Collate context from Slack messages into each task
+    const collated = await collateTaskContext([...extractedTasks], slackData, []);
     extractedTasks.length = 0;
     extractedTasks.push(...collated);
 
@@ -132,7 +127,7 @@ export async function POST() {
     extractedTasks.length = 0;
     extractedTasks.push(...filtered);
 
-    await log("claude-collation", "ok", `context collated across ${slackData.length} slack msgs and ${meetings.length} meetings`);
+    await log("claude-collation", "ok", `context collated across ${slackData.length} slack msgs`);
   } catch (e) {
     await log("claude-analysis", "error", String(e));
   }
@@ -178,54 +173,6 @@ export async function POST() {
     }
   }
 
-  // Sync Granola calls and map to tasks
-  for (const call of granolaData) {
-    try {
-      const existing = await prisma.granolaCall.findUnique({ where: { granolaId: call.id } });
-      if (existing?.synced) continue;
-
-      const granolaCall = await prisma.granolaCall.upsert({
-        where: { granolaId: call.id },
-        create: {
-          granolaId: call.id,
-          title: call.title,
-          startedAt: new Date(call.startedAt),
-          duration: call.duration || null,
-          transcript: call.transcript || null,
-          summary: call.summary || null,
-          attendees: call.attendees ? JSON.stringify(call.attendees) : null,
-        },
-        update: {
-          title: call.title,
-          summary: call.summary || null,
-        },
-      });
-
-      if (savedTasks.length > 0) {
-        const mapping = await mapCallToTasks(
-          { title: call.title, summary: call.summary, transcript: call.transcript, attendees: call.attendees },
-          savedTasks.map((t) => ({ id: t.id, title: t.title, description: t.description }))
-        );
-
-        await prisma.callMapping.create({
-          data: {
-            callId: granolaCall.id,
-            taskId: mapping.taskId || null,
-            notes: mapping.notes,
-            confidence: mapping.confidence,
-            confirmed: !mapping.needsConfirmation && mapping.confidence > 0.7,
-          },
-        });
-
-        if (!mapping.needsConfirmation) {
-          await prisma.granolaCall.update({ where: { id: granolaCall.id }, data: { synced: true } });
-        }
-      }
-    } catch {
-      // skip individual call errors
-    }
-  }
-
   // Auto-group newly saved tasks into projects
   try {
     const ungrouped = await prisma.task.findMany({
@@ -246,7 +193,6 @@ export async function POST() {
     ok: true,
     threadsFetched: emailData.length,
     tasksExtracted: extractedTasks.length,
-    callsSynced: granolaData.length,
     errors,
   });
 }
