@@ -111,7 +111,7 @@ If recentDoneTasks lists something semantically identical (same action + same su
 - confidence: 0.0–1.0 (your certainty this requires PM action)
 - deadline: ISO date if mentioned, otherwise omit
 - source: "email" | "slack" | "doc" | "sheet" | "calendar"
-- sourceRef: thread ID or doc ID
+- sourceRef: MUST be the exact "id" field from the source data (email thread id, event id, doc id). For docs/sheets use the exact id value — never invent or describe it. This is critical for deduplication.
 - rawContext: 2–3 sentence plain-English summary of the source. Who sent it, what the thread/doc is about, and what the specific ask is. Do NOT paste the original text — summarise it.
 
 DATA:

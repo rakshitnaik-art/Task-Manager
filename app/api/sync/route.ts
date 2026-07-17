@@ -110,8 +110,18 @@ export async function POST() {
     extractedTasks.length = 0;
     extractedTasks.push(...collated);
 
-    // Fetch existing open task titles for deduplication
-    const existingTasks = await prisma.task.findMany({ where: { status: "open" }, select: { title: true } });
+    // Fetch existing task titles for deduplication — include done/closed from last 60 days
+    // so tasks the user already completed don't get re-created on the next sync
+    const thirtyDaysAgo = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000);
+    const existingTasks = await prisma.task.findMany({
+      where: {
+        OR: [
+          { status: { in: ["open", "in_progress", "blocked"] } },
+          { status: { in: ["done", "closed"] }, updatedAt: { gte: thirtyDaysAgo } },
+        ],
+      },
+      select: { title: true, status: true },
+    });
     const existingTitles = existingTasks.map(t => t.title);
     const deduped = await deduplicateTasks([...extractedTasks], existingTitles);
 
@@ -139,6 +149,16 @@ export async function POST() {
         savedTasks.push(existing);
         continue;
       }
+
+      // Second guard: skip if any task (any status) with same title exists
+      const exactTitleMatch = await prisma.task.findFirst({ where: { title: task.title } });
+      if (exactTitleMatch) {
+        if (exactTitleMatch.status !== "done" && exactTitleMatch.status !== "closed") {
+          savedTasks.push(exactTitleMatch);
+        }
+        continue;
+      }
+
 
       const saved = await prisma.task.create({
         data: {
